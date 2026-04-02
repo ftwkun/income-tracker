@@ -140,6 +140,9 @@ tr.month-sep td { border-top: 1px solid var(--border2); }
 tr.col-total td { background: var(--surface) !important; border-top: 1px solid var(--border2); }
 tr.col-total td:first-child { color: var(--muted2); font-size: 10px; }
 .col-total-val { color: var(--warn); font-weight: 600; }
+tr.month-total-row td { background: rgba(34,211,238,0.04) !important; border-top: 1px solid rgba(34,211,238,0.15); border-bottom: 1px solid rgba(34,211,238,0.15); }
+tr.weekend td:first-child { color: #aaa; }
+tr.past.weekend td:first-child { color: #666; }
 
 /* ══════════════════════════════════════════
    DAY MODE
@@ -440,27 +443,54 @@ function renderMatrix() {
   const days = daysInYear(state.year);
   const sources = state.sources;
   const td0 = today();
+  const MONTHS_RU = ['январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
 
   let html = '<table id="matrix"><thead><tr>';
   html += '<th>дата</th>';
-  sources.forEach(function(s) {
-    html += '<th>' + s.code + '</th>';
-  });
+  sources.forEach(function(s) { html += '<th>' + s.code + '</th>'; });
   html += '<th style="color:var(--warn)">итог</th>';
   html += '</tr></thead><tbody>';
+
+  // pre-calc month buckets
+  const monthTotals = {}; // month -> { srcId -> total, row: total }
+  days.forEach(function(ds) {
+    const mo = new Date(ds).getMonth();
+    if (!monthTotals[mo]) { monthTotals[mo] = { row: 0 }; sources.forEach(function(s){ monthTotals[mo][s.id] = 0; }); }
+    sources.forEach(function(s) {
+      const v = parseFloat(getCell(ds, s.id).value);
+      if (!isNaN(v) && v > 0) { monthTotals[mo][s.id] += v; monthTotals[mo].row += v; }
+    });
+  });
 
   let prevMonth = -1;
   days.forEach(function(ds) {
     const d = new Date(ds);
     const mo = d.getMonth();
+    const dow = d.getDay(); // 0=вс, 6=сб
+    const isWeekend = dow === 0 || dow === 6;
     const isPast = ds < td0;
     const isToday = ds === td0;
-    let cls = isPast ? 'past' : isToday ? 'today' : 'future';
-    if (mo !== prevMonth && prevMonth >= 0) cls += ' month-sep';
+
+    // month total row before new month
+    if (mo !== prevMonth && prevMonth >= 0) {
+      const mt = monthTotals[prevMonth];
+      html += '<tr class="month-total-row">';
+      html += '<td style="padding:4px 8px;color:var(--accent2);font-size:10px;font-weight:600;letter-spacing:0.05em;">' + MONTHS_RU[prevMonth].slice(0,3).toUpperCase() + '</td>';
+      sources.forEach(function(s) {
+        const v = mt[s.id] || 0;
+        html += '<td style="padding:0 6px;text-align:right;font-family:var(--mono);font-size:10px;color:' + (v > 0 ? 'var(--accent2)' : 'var(--muted)') + ';font-weight:600;">' + (v > 0 ? fmtNum(v) : '') + '</td>';
+      });
+      html += '<td style="padding:0 8px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--warn);font-weight:700;">' + (mt.row > 0 ? fmtNum(mt.row) : '') + '</td>';
+      html += '</tr>';
+    }
     prevMonth = mo;
 
+    let cls = isPast ? 'past' : isToday ? 'today' : 'future';
+    if (isWeekend) cls += ' weekend';
+
     html += '<tr class="' + cls + '">';
-    html += '<td>' + fmtDate(ds) + '</td>';
+    const dateColor = isWeekend ? (isPast ? '#666' : '#aaa') : '';
+    html += '<td' + (dateColor ? ' style="color:' + dateColor + '"' : '') + '>' + fmtDate(ds) + '</td>';
     let rowTotal = 0;
     sources.forEach(function(s) {
       const cell = getCell(ds, s.id);
@@ -472,60 +502,57 @@ function renderMatrix() {
       html += '<td class="m-cell"><input type="number" data-date="' + ds + '" data-src="' + s.id + '"' +
         ' value="' + (hasVal ? Math.round(n) : '') + '"' +
         ' class="' + inputCls + '"' +
-        ' placeholder="" inputmode="numeric">' +
-        '</td>';
+        ' placeholder="" inputmode="numeric"></td>';
     });
     const totalCls = rowTotal > 0 ? 'm-total' : 'zero';
     html += '<td style="padding:0 8px;text-align:right;" class="' + totalCls + '">' + (rowTotal > 0 ? fmtNum(rowTotal) : '') + '</td>';
     html += '</tr>';
   });
 
-  // col totals
-  html += '<tr class="col-total"><td>итого</td>';
+  // last month total
+  if (prevMonth >= 0) {
+    const mt = monthTotals[prevMonth];
+    html += '<tr class="month-total-row">';
+    html += '<td style="padding:4px 8px;color:var(--accent2);font-size:10px;font-weight:600;letter-spacing:0.05em;">' + MONTHS_RU[prevMonth].slice(0,3).toUpperCase() + '</td>';
+    sources.forEach(function(s) {
+      const v = mt[s.id] || 0;
+      html += '<td style="padding:0 6px;text-align:right;font-family:var(--mono);font-size:10px;color:' + (v > 0 ? 'var(--accent2)' : 'var(--muted)') + ';font-weight:600;">' + (v > 0 ? fmtNum(v) : '') + '</td>';
+    });
+    html += '<td style="padding:0 8px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--warn);font-weight:700;">' + (mt.row > 0 ? fmtNum(mt.row) : '') + '</td>';
+    html += '</tr>';
+  }
+
+  // year col totals
+  html += '<tr class="col-total"><td style="color:var(--accent2);font-size:10px;letter-spacing:0.05em;">ГОД</td>';
+  let grandTotal = 0;
   sources.forEach(function(s) {
     let total = 0;
-    days.forEach(function(ds) {
-      const v = parseFloat(getCell(ds, s.id).value);
-      if (!isNaN(v)) total += v;
-    });
-    html += '<td class="m-cell" style="padding:0 6px;text-align:right;" class="col-total-val">' +
-      '<span style="color:var(--warn);font-family:var(--mono);font-size:11px;">' +
+    days.forEach(function(ds) { const v = parseFloat(getCell(ds, s.id).value); if (!isNaN(v)) total += v; });
+    grandTotal += total;
+    html += '<td class="m-cell" style="padding:0 6px;text-align:right;">' +
+      '<span style="color:var(--warn);font-family:var(--mono);font-size:11px;font-weight:600;">' +
       (total > 0 ? fmtNum(total) : '—') + '</span></td>';
   });
-  let grandTotal = 0;
-  days.forEach(function(ds) {
-    sources.forEach(function(s) {
-      const v = parseFloat(getCell(ds, s.id).value);
-      if (!isNaN(v)) grandTotal += v;
-    });
-  });
-  html += '<td style="padding:0 8px;text-align:right;color:var(--accent);font-family:var(--mono);font-size:12px;font-weight:600;">' + fmtNum(grandTotal) + '</td>';
-  html += '</tr>';
-
-  html += '</tbody></table>';
+  html += '<td style="padding:0 8px;text-align:right;color:var(--accent);font-family:var(--mono);font-size:12px;font-weight:700;">' + fmtNum(grandTotal) + '</td>';
+  html += '</tr></tbody></table>';
   wrap.innerHTML = html;
 
-  // scroll to today
   setTimeout(function() {
     const rows = wrap.querySelectorAll('tr.today');
     if (rows.length) rows[0].scrollIntoView({ block: 'center' });
   }, 50);
 
-  // events
   wrap.querySelectorAll('input[data-date]').forEach(function(inp) {
     inp.addEventListener('change', function() {
       setCell(this.dataset.date, this.dataset.src, this.value);
-      // update row total inline
       const row = this.closest('tr');
       let rowTotal = 0;
       row.querySelectorAll('input[data-date]').forEach(function(i) {
-        const v = parseFloat(i.value);
-        if (!isNaN(v)) rowTotal += v;
+        const v = parseFloat(i.value); if (!isNaN(v)) rowTotal += v;
       });
       const totalCell = row.lastElementChild;
       totalCell.textContent = rowTotal > 0 ? fmtNum(rowTotal) : '';
       totalCell.className = rowTotal > 0 ? 'm-total' : 'zero';
-      // update input class
       const n = parseFloat(this.value);
       this.className = (!isNaN(n) && n !== 0) ? 'has-value' : 'zero';
     });
