@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Income Tracker</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500&display=swap');
+
+:root {
+  --bg: #0e0e0f;
+  --surface: #161617;
+  --surface2: #1e1e20;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --text: #e8e8e6;
+  --muted: #555;
+  --muted2: #777;
+  --accent: #4ade80;
+  --accent2: #22d3ee;
+  --danger: #f87171;
+  --warn: #fbbf24;
+  --past: rgba(255,255,255,0.03);
+  --today-bg: rgba(74,222,128,0.06);
+  --today-border: rgba(74,222,128,0.3);
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Inter', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; overflow: hidden; }
+body { font-family: var(--sans); background: var(--bg); color: var(--text); font-size: 13px; }
+
+/* ── Layout ── */
+#app { display: flex; flex-direction: column; height: 100vh; }
+
+/* ── Header ── */
+#header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+  z-index: 100;
+}
+#header h1 { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--muted2); letter-spacing: 0.05em; flex: 1; }
+.mode-btn {
+  font-family: var(--mono); font-size: 11px; padding: 4px 10px;
+  background: none; border: 1px solid var(--border2); border-radius: 4px;
+  color: var(--muted2); cursor: pointer; transition: all 0.15s;
+}
+.mode-btn.active { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+#btn-sources {
+  font-family: var(--mono); font-size: 11px; padding: 4px 8px;
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  color: var(--muted); cursor: pointer;
+}
+#btn-sources:hover { border-color: var(--border2); color: var(--muted2); }
+
+/* ── Main content ── */
+#content { flex: 1; overflow: hidden; position: relative; }
+
+/* ══════════════════════════════════════════
+   MATRIX MODE
+══════════════════════════════════════════ */
+#matrix-wrap {
+  width: 100%; height: 100%;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+#matrix {
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 11px;
+  width: max-content;
+  min-width: 100%;
+}
+
+#matrix th, #matrix td {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+/* sticky date col */
+#matrix th:first-child,
+#matrix td:first-child {
+  position: sticky; left: 0; z-index: 2;
+  background: var(--bg);
+  border-right: 1px solid var(--border2);
+}
+
+/* sticky header row */
+#matrix thead th {
+  position: sticky; top: 0; z-index: 3;
+  background: var(--surface);
+  padding: 6px 10px;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+  color: var(--muted2);
+  text-transform: uppercase;
+}
+#matrix thead th:first-child { z-index: 4; }
+
+/* date cells */
+#matrix td:first-child {
+  padding: 4px 8px;
+  color: var(--muted2);
+  font-size: 10px;
+  min-width: 64px;
+}
+
+/* value cells */
+.m-cell {
+  padding: 0; width: 64px; min-width: 64px;
+}
+.m-cell input {
+  width: 64px; height: 26px;
+  background: none; border: none; outline: none;
+  font-family: var(--mono); font-size: 11px;
+  color: var(--text); text-align: right;
+  padding: 0 6px; cursor: pointer;
+}
+.m-cell input:focus { background: rgba(74,222,128,0.08); color: var(--accent); }
+.m-cell input.has-value { color: var(--accent2); }
+.m-cell input.zero { color: var(--muted); }
+
+/* row states */
+tr.past td:first-child { color: var(--muted); }
+tr.past .m-cell input { color: var(--muted2); }
+tr.past .m-cell input.has-value { color: rgba(34,211,238,0.5); }
+tr.today td { background: var(--today-bg) !important; }
+tr.today td:first-child { color: var(--accent) !important; font-weight: 600; }
+tr.month-sep td { border-top: 1px solid var(--border2); }
+
+/* row total */
+.m-total { color: var(--warn) !important; font-weight: 600; }
+
+/* col total row */
+tr.col-total td { background: var(--surface) !important; border-top: 1px solid var(--border2); }
+tr.col-total td:first-child { color: var(--muted2); font-size: 10px; }
+.col-total-val { color: var(--warn); font-weight: 600; }
+
+/* ══════════════════════════════════════════
+   DAY MODE
+══════════════════════════════════════════ */
+#day-wrap {
+  width: 100%; height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0;
+}
+
+.day-card {
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.day-card.past { background: var(--past); }
+.day-card.today { background: var(--today-bg); border-left: 2px solid var(--accent); }
+.day-card.future { background: var(--bg); }
+
+.day-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.day-date {
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  min-width: 80px; color: var(--muted2);
+}
+.day-card.today .day-date { color: var(--accent); }
+.day-card.past .day-date { color: var(--muted); }
+.day-total {
+  font-family: var(--mono); font-size: 12px;
+  color: var(--warn); font-weight: 600; margin-left: auto;
+}
+.day-total.zero { color: var(--muted); font-weight: 400; }
+.day-chevron { color: var(--muted); font-size: 10px; transition: transform 0.2s; }
+.day-card.expanded .day-chevron { transform: rotate(90deg); }
+
+.day-entries {
+  display: none;
+  padding: 0 14px 10px;
+  gap: 4px;
+}
+.day-card.expanded .day-entries { display: flex; flex-direction: column; }
+
+.entry-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+.entry-row:last-child { border-bottom: none; }
+.entry-code {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  color: var(--muted2); min-width: 36px;
+  letter-spacing: 0.05em;
+}
+.entry-input {
+  flex: 1; background: none; border: none; outline: none;
+  font-family: var(--mono); font-size: 13px;
+  color: var(--text); text-align: right;
+  padding: 2px 0;
+}
+.entry-input:focus { color: var(--accent); }
+.entry-input.has-value { color: var(--accent2); }
+.entry-input.zero { color: var(--muted); }
+.entry-hist-btn {
+  font-size: 9px; color: var(--muted); background: none; border: none;
+  cursor: pointer; padding: 2px 4px;
+  font-family: var(--mono);
+}
+.entry-hist-btn:hover { color: var(--muted2); }
+
+/* ── Source inactive overlay ── */
+.entry-row.inactive .entry-code { color: var(--muted); opacity: 0.4; }
+.entry-row.inactive .entry-input { opacity: 0.3; }
+
+/* ══════════════════════════════════════════
+   SOURCES PANEL
+══════════════════════════════════════════ */
+#sources-panel {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.7);
+  display: none; align-items: flex-end;
+}
+#sources-panel.open { display: flex; }
+#sources-inner {
+  width: 100%; background: var(--surface);
+  border-radius: 16px 16px 0 0;
+  padding: 16px 16px 32px;
+  max-height: 80vh; overflow-y: auto;
+}
+#sources-inner h2 {
+  font-family: var(--mono); font-size: 12px; color: var(--muted2);
+  letter-spacing: 0.08em; text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.src-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+}
+.src-code-input {
+  font-family: var(--mono); font-size: 13px; font-weight: 600;
+  background: none; border: 1px solid var(--border2); border-radius: 4px;
+  color: var(--accent2); padding: 4px 8px; width: 56px;
+  text-align: center; text-transform: uppercase;
+}
+.src-name-input {
+  flex: 1; background: none; border: 1px solid var(--border2); border-radius: 4px;
+  color: var(--text); padding: 4px 8px; font-size: 12px;
+}
+.src-dates { display: flex; gap: 4px; }
+.src-date-input {
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  color: var(--muted2); padding: 3px 5px; font-size: 10px;
+  font-family: var(--mono); width: 90px;
+}
+.src-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 4px; }
+.src-del:hover { color: var(--danger); }
+#btn-add-src {
+  margin-top: 12px; width: 100%;
+  background: none; border: 1px dashed var(--border2);
+  border-radius: 6px; padding: 10px;
+  color: var(--muted2); font-family: var(--mono); font-size: 11px;
+  cursor: pointer; letter-spacing: 0.05em;
+}
+#btn-add-src:hover { border-color: var(--accent); color: var(--accent); }
+#btn-close-src {
+  position: absolute; top: 16px; right: 16px;
+  background: none; border: none; color: var(--muted);
+  font-size: 20px; cursor: pointer;
+}
+
+/* ── History popup ── */
+#hist-popup {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,0.8);
+  display: none; align-items: center; justify-content: center;
+}
+#hist-popup.open { display: flex; }
+#hist-inner {
+  background: var(--surface); border-radius: 12px;
+  padding: 16px; min-width: 260px; max-width: 90vw;
+}
+#hist-inner h3 { font-family: var(--mono); font-size: 11px; color: var(--muted2); margin-bottom: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+.hist-row {
+  display: flex; justify-content: space-between; gap: 16px;
+  padding: 5px 0; border-bottom: 1px solid var(--border);
+  font-family: var(--mono); font-size: 11px;
+}
+.hist-row:last-child { border-bottom: none; }
+.hist-ts { color: var(--muted); }
+.hist-val { color: var(--accent2); font-weight: 600; }
+#btn-close-hist {
+  margin-top: 12px; width: 100%;
+  background: none; border: 1px solid var(--border2); border-radius: 6px;
+  padding: 8px; color: var(--muted2); font-family: var(--mono); font-size: 11px;
+  cursor: pointer;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+input { -webkit-appearance: none; }
+input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <h1>income //</h1>
+    <button class="mode-btn active" id="btn-matrix" onclick="setMode('matrix')">матрица</button>
+    <button class="mode-btn" id="btn-day" onclick="setMode('day')">день</button>
+    <button id="btn-sources" onclick="openSources()">источники</button>
+  </div>
+  <div id="content">
+    <div id="matrix-wrap" style="display:block;"></div>
+    <div id="day-wrap" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- Sources panel -->
+<div id="sources-panel" onclick="if(event.target===this)closeSources()">
+  <div id="sources-inner">
+    <button id="btn-close-src" onclick="closeSources()">×</button>
+    <h2>Источники доходов</h2>
+    <div id="src-list"></div>
+    <button id="btn-add-src" onclick="addSource()">+ добавить источник</button>
+  </div>
+</div>
+
+<!-- History popup -->
+<div id="hist-popup" onclick="if(event.target===this)closeHist()">
+  <div id="hist-inner">
+    <h3 id="hist-title">история</h3>
+    <div id="hist-list"></div>
+    <button id="btn-close-hist" onclick="closeHist()">закрыть</button>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────
+const STORE_KEY = 'income_tracker_v1';
+let state = { sources: [], cells: {}, year: new Date().getFullYear() };
+
+function load() {
+  try {
+    const s = localStorage.getItem(STORE_KEY);
+    if (s) state = JSON.parse(s);
+  } catch(e) {}
+  if (!state.sources) state.sources = [];
+  if (!state.cells) state.cells = {};
+  if (!state.year) state.year = new Date().getFullYear();
+}
+
+function save() {
+  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+}
+
+function cellKey(date, srcId) { return date + '|' + srcId; }
+
+function getCell(date, srcId) {
+  return state.cells[cellKey(date, srcId)] || { value: '', history: [] };
+}
+
+function setCell(date, srcId, value) {
+  const key = cellKey(date, srcId);
+  if (!state.cells[key]) state.cells[key] = { value: '', history: [] };
+  const cell = state.cells[key];
+  const now = new Date().toISOString();
+  if (cell.value !== value) {
+    cell.history.push({ value: cell.value, ts: now });
+    cell.value = value;
+  }
+  save();
+}
+
+// ── Date helpers ───────────────────────────────────────────────────────
+function today() { return new Date().toISOString().split('T')[0]; }
+
+function daysInYear(year) {
+  const days = [];
+  const d = new Date(year, 0, 1);
+  while (d.getFullYear() === year) {
+    days.push(d.toISOString().split('T')[0]);
+    d.setDate(d.getDate() + 1);
+  }
+  return days;
+}
+
+function fmtDate(ds) {
+  const d = new Date(ds);
+  const dd = d.getDate();
+  const mo = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'][d.getMonth()];
+  const dow = ['вс','пн','вт','ср','чт','пт','сб'][d.getDay()];
+  return dd + ' ' + mo + ' ' + dow;
+}
+
+function fmtTs(iso) {
+  const d = new Date(iso);
+  return d.getDate() + '.' + String(d.getMonth()+1).padStart(2,'0') + ' ' +
+    String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+
+function fmtNum(v) {
+  if (!v && v !== 0) return '';
+  const n = parseFloat(v);
+  if (isNaN(n)) return '';
+  return Math.round(n).toLocaleString('ru');
+}
+
+function activeSources(date) {
+  return state.sources.filter(function(s) {
+    if (s.end && date > s.end) return false;
+    if (s.start && date < s.start) return false;
+    return true;
+  });
+}
+
+// ── Mode ───────────────────────────────────────────────────────────────
+let mode = 'matrix';
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('btn-matrix').classList.toggle('active', m === 'matrix');
+  document.getElementById('btn-day').classList.toggle('active', m === 'day');
+  document.getElementById('matrix-wrap').style.display = m === 'matrix' ? 'block' : 'none';
+  document.getElementById('day-wrap').style.display = m === 'day' ? 'block' : 'none';
+  if (m === 'matrix') renderMatrix();
+  else renderDay();
+}
+
+// ── Matrix ─────────────────────────────────────────────────────────────
+function renderMatrix() {
+  const wrap = document.getElementById('matrix-wrap');
+  const days = daysInYear(state.year);
+  const sources = state.sources;
+  const td0 = today();
+
+  let html = '<table id="matrix"><thead><tr>';
+  html += '<th>дата</th>';
+  sources.forEach(function(s) {
+    html += '<th>' + s.code + '</th>';
+  });
+  html += '<th style="color:var(--warn)">итог</th>';
+  html += '</tr></thead><tbody>';
+
+  let prevMonth = -1;
+  days.forEach(function(ds) {
+    const d = new Date(ds);
+    const mo = d.getMonth();
+    const isPast = ds < td0;
+    const isToday = ds === td0;
+    let cls = isPast ? 'past' : isToday ? 'today' : 'future';
+    if (mo !== prevMonth && prevMonth >= 0) cls += ' month-sep';
+    prevMonth = mo;
+
+    html += '<tr class="' + cls + '">';
+    html += '<td>' + fmtDate(ds) + '</td>';
+    let rowTotal = 0;
+    sources.forEach(function(s) {
+      const cell = getCell(ds, s.id);
+      const v = cell.value;
+      const n = parseFloat(v);
+      const hasVal = !isNaN(n) && n !== 0;
+      if (hasVal) rowTotal += n;
+      const inputCls = hasVal ? 'has-value' : (!v ? 'zero' : '');
+      html += '<td class="m-cell"><input type="number" data-date="' + ds + '" data-src="' + s.id + '"' +
+        ' value="' + (hasVal ? Math.round(n) : '') + '"' +
+        ' class="' + inputCls + '"' +
+        ' placeholder="" inputmode="numeric">' +
+        '</td>';
+    });
+    const totalCls = rowTotal > 0 ? 'm-total' : 'zero';
+    html += '<td style="padding:0 8px;text-align:right;" class="' + totalCls + '">' + (rowTotal > 0 ? fmtNum(rowTotal) : '') + '</td>';
+    html += '</tr>';
+  });
+
+  // col totals
+  html += '<tr class="col-total"><td>итого</td>';
+  sources.forEach(function(s) {
+    let total = 0;
+    days.forEach(function(ds) {
+      const v = parseFloat(getCell(ds, s.id).value);
+      if (!isNaN(v)) total += v;
+    });
+    html += '<td class="m-cell" style="padding:0 6px;text-align:right;" class="col-total-val">' +
+      '<span style="color:var(--warn);font-family:var(--mono);font-size:11px;">' +
+      (total > 0 ? fmtNum(total) : '—') + '</span></td>';
+  });
+  let grandTotal = 0;
+  days.forEach(function(ds) {
+    sources.forEach(function(s) {
+      const v = parseFloat(getCell(ds, s.id).value);
+      if (!isNaN(v)) grandTotal += v;
+    });
+  });
+  html += '<td style="padding:0 8px;text-align:right;color:var(--accent);font-family:var(--mono);font-size:12px;font-weight:600;">' + fmtNum(grandTotal) + '</td>';
+  html += '</tr>';
+
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+
+  // scroll to today
+  setTimeout(function() {
+    const rows = wrap.querySelectorAll('tr.today');
+    if (rows.length) rows[0].scrollIntoView({ block: 'center' });
+  }, 50);
+
+  // events
+  wrap.querySelectorAll('input[data-date]').forEach(function(inp) {
+    inp.addEventListener('change', function() {
+      setCell(this.dataset.date, this.dataset.src, this.value);
+      // update row total inline
+      const row = this.closest('tr');
+      let rowTotal = 0;
+      row.querySelectorAll('input[data-date]').forEach(function(i) {
+        const v = parseFloat(i.value);
+        if (!isNaN(v)) rowTotal += v;
+      });
+      const totalCell = row.lastElementChild;
+      totalCell.textContent = rowTotal > 0 ? fmtNum(rowTotal) : '';
+      totalCell.className = rowTotal > 0 ? 'm-total' : 'zero';
+      // update input class
+      const n = parseFloat(this.value);
+      this.className = (!isNaN(n) && n !== 0) ? 'has-value' : 'zero';
+    });
+    inp.addEventListener('focus', function() { this.select(); });
+  });
+}
+
+// ── Day mode ───────────────────────────────────────────────────────────
+function renderDay() {
+  const wrap = document.getElementById('day-wrap');
+  const days = daysInYear(state.year);
+  const td0 = today();
+  let html = '';
+
+  days.forEach(function(ds) {
+    const isPast = ds < td0;
+    const isToday = ds === td0;
+    const cls = isPast ? 'past' : isToday ? 'today' : 'future';
+    const expanded = isToday ? ' expanded' : '';
+
+    // row total
+    let total = 0;
+    state.sources.forEach(function(s) {
+      if (!isSourceActive(s, ds)) return;
+      const v = parseFloat(getCell(ds, s.id).value);
+      if (!isNaN(v)) total += v;
+    });
+
+    html += '<div class="day-card ' + cls + expanded + '" data-date="' + ds + '">';
+    html += '<div class="day-header" onclick="toggleDay(this.parentElement)">';
+    html += '<span class="day-date">' + fmtDate(ds) + '</span>';
+    html += '<span class="day-total ' + (total === 0 ? 'zero' : '') + '">' + (total > 0 ? fmtNum(total) : '—') + '</span>';
+    html += '<span class="day-chevron">▶</span>';
+    html += '</div>';
+
+    html += '<div class="day-entries">';
+    state.sources.forEach(function(s) {
+      const active = isSourceActive(s, ds);
+      const cell = getCell(ds, s.id);
+      const v = cell.value;
+      const n = parseFloat(v);
+      const hasVal = !isNaN(n) && n !== 0;
+      const inputCls = hasVal ? 'has-value' : '';
+      const rowCls = active ? '' : ' inactive';
+      html += '<div class="entry-row' + rowCls + '">';
+      html += '<span class="entry-code">' + s.code + '</span>';
+      html += '<input class="entry-input ' + inputCls + '" type="number" inputmode="numeric"' +
+        ' data-date="' + ds + '" data-src="' + s.id + '"' +
+        ' value="' + (hasVal ? Math.round(n) : '') + '" placeholder="—">';
+      if (cell.history && cell.history.length > 0) {
+        html += '<button class="entry-hist-btn" data-date="' + ds + '" data-src="' + s.id + '">hist</button>';
+      }
+      html += '</div>';
+    });
+    html += '</div></div>';
+  });
+
+  wrap.innerHTML = html;
+
+  // scroll to today
+  setTimeout(function() {
+    const el = wrap.querySelector('.day-card.today');
+    if (el) el.scrollIntoView({ block: 'start' });
+  }, 50);
+
+  // events
+  wrap.querySelectorAll('.entry-input').forEach(function(inp) {
+    inp.addEventListener('change', function() {
+      setCell(this.dataset.date, this.dataset.src, this.value);
+      // update day total
+      const card = this.closest('.day-card');
+      const ds = card.dataset.date;
+      let total = 0;
+      state.sources.forEach(function(s) {
+        const v = parseFloat(getCell(ds, s.id).value);
+        if (!isNaN(v)) total += v;
+      });
+      card.querySelector('.day-total').textContent = total > 0 ? fmtNum(total) : '—';
+      card.querySelector('.day-total').className = 'day-total' + (total === 0 ? ' zero' : '');
+      const n = parseFloat(this.value);
+      this.className = 'entry-input' + ((!isNaN(n) && n !== 0) ? ' has-value' : '');
+      // add hist button if needed
+      const cell = getCell(ds, this.dataset.src);
+      if (cell.history.length > 0 && !this.nextElementSibling) {
+        const btn = document.createElement('button');
+        btn.className = 'entry-hist-btn';
+        btn.dataset.date = ds;
+        btn.dataset.src = this.dataset.src;
+        btn.textContent = 'hist';
+        btn.addEventListener('click', function() { showHist(this.dataset.date, this.dataset.src); });
+        this.parentElement.appendChild(btn);
+      }
+    });
+    inp.addEventListener('focus', function() { this.select(); });
+  });
+
+  wrap.querySelectorAll('.entry-hist-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() { showHist(this.dataset.date, this.dataset.src); });
+  });
+}
+
+function isSourceActive(s, date) {
+  if (s.end && date > s.end) return false;
+  if (s.start && date < s.start) return false;
+  return true;
+}
+
+function toggleDay(card) {
+  card.classList.toggle('expanded');
+}
+
+// ── Sources ────────────────────────────────────────────────────────────
+function openSources() {
+  renderSources();
+  document.getElementById('sources-panel').classList.add('open');
+}
+
+function closeSources() {
+  document.getElementById('sources-panel').classList.remove('open');
+  save();
+  if (mode === 'matrix') renderMatrix();
+  else renderDay();
+}
+
+function renderSources() {
+  const list = document.getElementById('src-list');
+  let html = '';
+  state.sources.forEach(function(s, i) {
+    html += '<div class="src-item" data-idx="' + i + '">';
+    html += '<input class="src-code-input" value="' + s.code + '" maxlength="4" placeholder="КОД" data-field="code" data-idx="' + i + '">';
+    html += '<input class="src-name-input" value="' + (s.name||'') + '" placeholder="название" data-field="name" data-idx="' + i + '">';
+    html += '<div class="src-dates">';
+    html += '<input class="src-date-input" type="date" value="' + (s.start||'') + '" placeholder="начало" data-field="start" data-idx="' + i + '">';
+    html += '<input class="src-date-input" type="date" value="' + (s.end||'') + '" placeholder="конец" data-field="end" data-idx="' + i + '">';
+    html += '</div>';
+    html += '<button class="src-del" data-idx="' + i + '">×</button>';
+    html += '</div>';
+  });
+  list.innerHTML = html;
+
+  list.querySelectorAll('input[data-field]').forEach(function(inp) {
+    inp.addEventListener('change', function() {
+      const idx = parseInt(this.dataset.idx);
+      state.sources[idx][this.dataset.field] = this.value;
+    });
+  });
+  list.querySelectorAll('.src-del').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const idx = parseInt(this.dataset.idx);
+      state.sources.splice(idx, 1);
+      renderSources();
+    });
+  });
+}
+
+function addSource() {
+  state.sources.push({
+    id: 'src_' + Date.now(),
+    code: 'NEW',
+    name: '',
+    start: today(),
+    end: ''
+  });
+  renderSources();
+}
+
+// ── History ────────────────────────────────────────────────────────────
+function showHist(date, srcId) {
+  const cell = getCell(date, srcId);
+  const src = state.sources.find(function(s) { return s.id === srcId; });
+  const code = src ? src.code : srcId;
+  document.getElementById('hist-title').textContent = code + ' · ' + fmtDate(date);
+  const list = document.getElementById('hist-list');
+  const all = cell.history.slice().reverse();
+  if (all.length === 0) {
+    list.innerHTML = '<div style="color:var(--muted);font-family:var(--mono);font-size:11px;padding:8px 0;">нет истории</div>';
+  } else {
+    list.innerHTML = all.map(function(h) {
+      return '<div class="hist-row"><span class="hist-ts">' + fmtTs(h.ts) + '</span><span class="hist-val">' + (h.value || '—') + '</span></div>';
+    }).join('');
+  }
+  document.getElementById('hist-popup').classList.add('open');
+}
+
+function closeHist() {
+  document.getElementById('hist-popup').classList.remove('open');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────
+load();
+// demo sources if empty
+if (state.sources.length === 0) {
+  state.sources = [
+    { id: 'src_1', code: 'ЗП', name: 'Зарплата', start: '', end: '' },
+    { id: 'src_2', code: 'АР', name: 'Аренда', start: '', end: '' },
+    { id: 'src_3', code: 'ДВ', name: 'Дивиденды', start: '', end: '' },
+  ];
+  save();
+}
+renderMatrix();
+</script>
+</body>
+</html>
