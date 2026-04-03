@@ -998,25 +998,18 @@ function packData() {
   });
 
   const bytes = new Uint8Array(buf, 0, pos);
-  let bin = '';
-  bytes.forEach(function(b) { bin += String.fromCharCode(b); });
-  return 'IT2:' + btoa(bin).replace(/\+/g,'-').replace(/\//g,'.').replace(/=/g,'');
+  let hex = 'IT2';
+  bytes.forEach(function(b) { hex += b.toString(16).padStart(2,'0'); });
+  return hex;
 }
 
 function unpackData(str) {
-  // support legacy IT1 format
-  if (str.startsWith('IT1:')) {
-    const b64 = str.slice(4).replace(/-/g,'+').replace(/\./g,'/');
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return JSON.parse(new TextDecoder().decode(bytes));
+  if (!str.startsWith('IT2')) throw new Error('bad format');
+  const hexStr = str.slice(3);
+  const bytes = new Uint8Array(hexStr.length / 2);
+  for (var i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(hexStr.slice(i*2, i*2+2), 16);
   }
-  if (!str.startsWith('IT2:')) throw new Error('bad format');
-  const b64 = str.slice(4).replace(/-/g,'+').replace(/\./g,'/');
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   const dv = new DataView(bytes.buffer);
   let pos = 0;
 
@@ -1083,7 +1076,7 @@ function doExport() {
 function doImport() {
   const raw = document.getElementById('import-field').value;
   // strip newlines, spaces and non-printable chars
-  const input = raw.replace(/[^\w\-\.:]/g, '').trim();
+  const input = raw.replace(/[^a-fA-F0-9IT]/g, '').trim();
   const field = document.getElementById('import-field');
   try {
     const newState = unpackData(input);
