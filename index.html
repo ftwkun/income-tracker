@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Income Tracker</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0e0e0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Income">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500&display=swap');
 
@@ -1193,6 +1198,11 @@ if (state.sources.length === 0) {
   save();
 }
 renderMatrix();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/income-tracker/sw.js');
+}
 </script>
 </body>
 </html>
