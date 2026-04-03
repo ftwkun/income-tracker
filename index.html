@@ -786,13 +786,31 @@ function renderMatrix() {
     });
   });
 
-  // error tooltips on past cells
+  // error tooltips on past cells — mouse hover + tap
   wrap.querySelectorAll('tr.past .m-cell input').forEach(function(inp) {
     const cell = state.cells[inp.dataset.date + '|' + inp.dataset.src];
     if (!cell || !cell.history || cell.history.length === 0) return;
     inp.addEventListener('mouseenter', function(e) { showErrTooltip(e, this.dataset.date, this.dataset.src); });
     inp.addEventListener('mousemove', posErrTooltip);
     inp.addEventListener('mouseleave', hideErrTooltip);
+    inp.addEventListener('touchend', function(e) {
+      const tt = document.getElementById('err-tooltip');
+      if (tt.style.display === 'block') {
+        hideErrTooltip();
+      } else {
+        const touch = e.changedTouches[0];
+        showErrTooltip({ clientX: touch.clientX, clientY: touch.clientY }, this.dataset.date, this.dataset.src);
+        e.preventDefault();
+      }
+    });
+  });
+
+  // tap outside tooltip to close on mobile
+  document.addEventListener('touchstart', function(e) {
+    const tt = document.getElementById('err-tooltip');
+    if (tt.style.display === 'block' && !tt.contains(e.target)) {
+      hideErrTooltip();
+    }
   });
 
   // add edit markers to date cells
@@ -1068,11 +1086,19 @@ function showErrTooltip(e, date, srcId) {
 
 function posErrTooltip(e) {
   const tt = document.getElementById('err-tooltip');
-  let x = e.clientX + 12, y = e.clientY + 12;
-  if (x + tt.offsetWidth > window.innerWidth - 8) x = e.clientX - tt.offsetWidth - 8;
-  if (y + tt.offsetHeight > window.innerHeight - 8) y = e.clientY - tt.offsetHeight - 8;
-  tt.style.left = x + 'px';
-  tt.style.top = y + 'px';
+  if (window.innerWidth < 480) {
+    // mobile: center horizontally, position near tap
+    tt.style.left = Math.max(8, (window.innerWidth - tt.offsetWidth) / 2) + 'px';
+    let y = e.clientY + 16;
+    if (y + tt.offsetHeight > window.innerHeight - 8) y = e.clientY - tt.offsetHeight - 8;
+    tt.style.top = Math.max(8, y) + 'px';
+  } else {
+    let x = e.clientX + 12, y = e.clientY + 12;
+    if (x + tt.offsetWidth > window.innerWidth - 8) x = e.clientX - tt.offsetWidth - 8;
+    if (y + tt.offsetHeight > window.innerHeight - 8) y = e.clientY - tt.offsetHeight - 8;
+    tt.style.left = x + 'px';
+    tt.style.top = y + 'px';
+  }
 }
 
 function hideErrTooltip() {
