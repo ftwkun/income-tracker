@@ -63,13 +63,52 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); font
 #btn-sources:hover { border-color: var(--border2); color: var(--muted2); }
 
 /* ── Main content ── */
-#content { flex: 1; overflow: hidden; position: relative; }
+#content { flex: 1; overflow: hidden; position: relative; display: flex; }
+
+/* ── Timeline slider ── */
+#timeline {
+  width: 14px; flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border2);
+  position: relative; overflow: hidden;
+  cursor: ns-resize;
+  user-select: none;
+}
+#timeline-track {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+}
+.tl-marker {
+  position: absolute; left: 2px; right: 2px; height: 2px;
+  background: var(--accent2); border-radius: 1px; opacity: 0.25;
+  cursor: pointer; transition: opacity 0.1s;
+}
+.tl-marker:hover { opacity: 1; }
+#tl-cursor {
+  position: absolute; left: 0; right: 0; height: 2px;
+  background: var(--accent); pointer-events: none;
+  box-shadow: 0 0 4px var(--accent);
+}
+#tl-label {
+  position: fixed; left: 20px;
+  background: var(--surface2); border: 1px solid var(--accent);
+  border-radius: 4px; padding: 2px 6px;
+  font-family: var(--mono); font-size: 10px; color: var(--accent);
+  pointer-events: none; z-index: 500; display: none;
+  white-space: nowrap;
+}
+#tl-now-btn {
+  position: absolute; bottom: 4px; left: 1px; right: 1px;
+  background: none; border: 1px solid var(--accent);
+  border-radius: 3px; color: var(--accent);
+  font-size: 8px; cursor: pointer; padding: 2px 0;
+  line-height: 1; z-index: 2;
+}
 
 /* ══════════════════════════════════════════
    MATRIX MODE
 ══════════════════════════════════════════ */
 #matrix-wrap {
-  width: 100%; height: 100%;
+  flex: 1; height: 100%;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -140,6 +179,35 @@ tr.month-sep td { border-top: 1px solid var(--border2); }
 
 /* row total */
 .m-total { color: var(--warn) !important; font-weight: 600; }
+
+/* edit marker dot in date cell */
+.edit-dot {
+  display: inline-block; width: 4px; height: 4px;
+  border-radius: 50%; background: var(--accent2);
+  margin-left: 3px; vertical-align: middle; opacity: 0.7;
+  flex-shrink: 0;
+}
+
+/* history view mode */
+#matrix.history-mode .m-cell input { color: var(--warn) !important; }
+#matrix.history-mode tr.today td { background: none !important; }
+
+/* error tooltip */
+#err-tooltip {
+  position: fixed; z-index: 600;
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 8px; padding: 8px 12px;
+  font-family: var(--mono); font-size: 10px;
+  pointer-events: none; display: none;
+  min-width: 160px; max-width: 240px;
+}
+.err-tt-row { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; }
+.err-tt-ts { color: var(--muted); }
+.err-tt-val { font-weight: 600; }
+.err-tt-delta-pos { color: var(--danger); }
+.err-tt-delta-neg { color: var(--accent); }
+.err-tt-delta-zero { color: var(--warn); }
+.err-tt-sep { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
 
 /* col total row */
 tr.col-total td { background: var(--surface) !important; border-top: 1px solid var(--border2); }
@@ -388,6 +456,13 @@ input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
     <button id="btn-settings" onclick="openSettings()">⚙</button>
   </div>
   <div id="content">
+    <div id="timeline" style="display:none;">
+      <div id="timeline-track"></div>
+      <div id="tl-cursor"></div>
+      <button id="tl-now-btn" onmousedown="event.preventDefault()" onclick="resetViewDate()" title="сейчас">●</button>
+    </div>
+    <div id="tl-label"></div>
+    <div id="err-tooltip"></div>
     <div id="matrix-wrap" style="display:block;"></div>
     <div id="day-wrap" style="display:none;"></div>
   </div>
@@ -627,7 +702,7 @@ function renderMatrix() {
     let cls = isPast ? 'past' : isToday ? 'today' : 'future';
     if (isWeekend) cls += ' weekend';
 
-    html += '<tr class="' + cls + '" data-month="' + mo + '"' + (collapsed ? ' style="display:none"' : '') + '>';
+    html += '<tr class="' + cls + '" data-month="' + mo + '" data-date-row="' + ds + '"' + (collapsed ? ' style="display:none"' : '') + '>';
     html += '<td>' + fmtDate(ds) + '</td>';
     let rowTotal = 0;
     sources.forEach(function(s) {
@@ -691,49 +766,343 @@ function renderMatrix() {
         sources.forEach(function(s) {
           const inp2 = document.querySelector('input[data-date="' + ds + '"][data-src="' + s.id + '"]');
           const v = parseFloat(inp2 ? inp2.value : getCell(ds, s.id).value);
-          if (!isNaN(v) && v > 0) { moTotals[s.id] += v; moTotals.row += v; }
+          if (!isNaN(v) && v !== 0) { moTotals[s.id] += v; moTotals.row += v; }
         });
       });
       const hdr = document.querySelector('tr.month-total-row[data-mo="' + mo + '"]');
       if (hdr) {
         const cells = hdr.querySelectorAll('td');
-        // cells[0] = name, cells[1..n] = sources, cells[n+1] = row total
         sources.forEach(function(s, i) {
           const v = moTotals[s.id] || 0;
-          cells[i + 1].textContent = v > 0 ? fmtNum(v) : '';
-          cells[i + 1].style.color = v > 0 ? 'var(--accent2)' : 'var(--muted)';
+          cells[i + 1].textContent = v !== 0 ? fmtNum(v) : '';
+          cells[i + 1].style.color = v !== 0 ? 'var(--accent2)' : 'var(--muted)';
         });
-        cells[cells.length - 1].textContent = moTotals.row > 0 ? fmtNum(moTotals.row) : '';
+        cells[cells.length - 1].textContent = moTotals.row !== 0 ? fmtNum(moTotals.row) : '';
       }
     });
     inp.addEventListener('focus', function() {
       this.select();
-      const _v = parseFloat(this.value);
-      if (!isNaN(_v) && _v !== 0) showMoveOverlay(this, this.dataset.date, this.dataset.src);
-      else hideMoveOverlay();
+      showMoveOverlay(this, this.dataset.date, this.dataset.src);
     });
   });
+
+  // error tooltips on past cells
+  wrap.querySelectorAll('tr.past .m-cell input').forEach(function(inp) {
+    const cell = state.cells[inp.dataset.date + '|' + inp.dataset.src];
+    if (!cell || !cell.history || cell.history.length === 0) return;
+    inp.addEventListener('mouseenter', function(e) { showErrTooltip(e, this.dataset.date, this.dataset.src); });
+    inp.addEventListener('mousemove', posErrTooltip);
+    inp.addEventListener('mouseleave', hideErrTooltip);
+  });
+
+  // add edit markers to date cells
+  renderMarkers(days);
+  // show timeline
+  renderTimeline(days);
+}
+
+// ── Edit markers ────────────────────────────────────────────────────────
+function renderMarkers(days) {
+  // find dates that have any edits
+  const editDates = new Set();
+  Object.keys(state.cells).forEach(function(key) {
+    const cell = state.cells[key];
+    if (cell.history && cell.history.length > 0) {
+      const ds = key.split('|')[0];
+      // mark the date of each history entry
+      cell.history.forEach(function(h) {
+        editDates.add(new Date(h.ts).toISOString().split('T')[0]);
+      });
+    }
+  });
+
+  // add dots to date cells
+  days.forEach(function(ds) {
+    if (!editDates.has(ds)) return;
+    const row = document.querySelector('tr[data-date-row="' + ds + '"]');
+    if (!row) return;
+    const dateCell = row.firstElementChild;
+    if (dateCell && !dateCell.querySelector('.edit-dot')) {
+      const dot = document.createElement('span');
+      dot.className = 'edit-dot';
+      dateCell.appendChild(dot);
+    }
+  });
+}
+
+// ── Timeline slider ─────────────────────────────────────────────────────
+let tlDragging = false;
+let viewDate = null; // null = live view
+
+function renderTimeline(days) {
+  const tl = document.getElementById('timeline');
+  const track = document.getElementById('timeline-track');
+  tl.style.display = 'block';
+  track.innerHTML = '';
+
+  // collect all edit timestamps
+  const editTimes = []; // {ts, ds}
+  Object.keys(state.cells).forEach(function(key) {
+    const cell = state.cells[key];
+    if (cell.history) {
+      cell.history.forEach(function(h) {
+        editTimes.push({ ts: new Date(h.ts).getTime() });
+      });
+    }
+    if (cell.value) editTimes.push({ ts: Date.now() });
+  });
+
+  if (editTimes.length === 0) return;
+
+  const minTs = Math.min.apply(null, editTimes.map(function(e) { return e.ts; }));
+  const maxTs = Date.now();
+  const range = maxTs - minTs || 1;
+
+  // unique timestamps → markers
+  const uniqueTs = [...new Set(editTimes.map(function(e) { return e.ts; }))].sort();
+  uniqueTs.forEach(function(ts) {
+    const pct = (ts - minTs) / range * 100;
+    const marker = document.createElement('div');
+    marker.className = 'tl-marker';
+    marker.style.top = pct + '%';
+    marker.title = new Date(ts).toLocaleDateString('ru');
+    marker.dataset.ts = ts;
+    marker.addEventListener('click', function(e) {
+      e.stopPropagation();
+      setViewDate(new Date(parseInt(this.dataset.ts)).toISOString());
+    });
+    track.appendChild(marker);
+  });
+
+  // drag on timeline
+  tl.addEventListener('mousedown', tlMouseDown);
+  tl.addEventListener('touchstart', tlTouchStart, { passive: true });
+}
+
+function tlGetPct(clientY) {
+  const tl = document.getElementById('timeline');
+  const rect = tl.getBoundingClientRect();
+  return Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+}
+
+function tlMouseDown(e) {
+  tlDragging = true;
+  tlMove(e.clientY);
+  document.addEventListener('mousemove', tlMouseMove);
+  document.addEventListener('mouseup', tlMouseUp);
+}
+function tlMouseMove(e) { if (tlDragging) tlMove(e.clientY); }
+function tlMouseUp() {
+  tlDragging = false;
+  document.removeEventListener('mousemove', tlMouseMove);
+  document.removeEventListener('mouseup', tlMouseUp);
+}
+function tlTouchStart(e) {
+  tlMove(e.touches[0].clientY);
+  document.addEventListener('touchmove', tlTouchMove, { passive: true });
+  document.addEventListener('touchend', tlTouchEnd);
+}
+function tlTouchMove(e) { tlMove(e.touches[0].clientY); }
+function tlTouchEnd() {
+  document.removeEventListener('touchmove', tlTouchMove);
+  document.removeEventListener('touchend', tlTouchEnd);
+}
+
+function tlMove(clientY) {
+  const pct = tlGetPct(clientY);
+  const cursor = document.getElementById('tl-cursor');
+  cursor.style.top = (pct * 100) + '%';
+
+  // find timestamp at this position
+  const minTs = getMinTs();
+  const maxTs = Date.now();
+  const ts = minTs + pct * (maxTs - minTs);
+  const dt = new Date(ts);
+  const label = document.getElementById('tl-label');
+  label.style.display = 'block';
+  label.style.top = (clientY - 10) + 'px';
+  label.textContent = dt.toLocaleDateString('ru') + ' ' + dt.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+
+  setViewDate(dt.toISOString(), true);
+}
+
+function getMinTs() {
+  let min = Date.now();
+  Object.keys(state.cells).forEach(function(key) {
+    const cell = state.cells[key];
+    if (cell.history) cell.history.forEach(function(h) {
+      const t = new Date(h.ts).getTime();
+      if (t < min) min = t;
+    });
+  });
+  return min;
+}
+
+function setViewDate(isoStr, preview) {
+  viewDate = isoStr;
+  const ts = new Date(isoStr).getTime();
+
+  // update all inputs to show values as of that timestamp
+  document.querySelectorAll('input[data-date][data-src]').forEach(function(inp) {
+    const key = inp.dataset.date + '|' + inp.dataset.src;
+    const cell = state.cells[key];
+    if (!cell) { inp.value = ''; inp.className = 'zero'; return; }
+
+    // find value at that timestamp: walk history in order
+    let val = '';
+    const hist = cell.history || [];
+    for (var i = 0; i < hist.length; i++) {
+      if (new Date(hist[i].ts).getTime() <= ts) val = hist[i].value;
+    }
+    // if all history is after ts, val stays ''
+    // if current value was set before ts, use it
+    if (new Date(cell.history && cell.history.length ? cell.history[cell.history.length-1].ts : 0).getTime() <= ts) {
+      val = cell.value;
+    }
+
+    const n = parseFloat(val);
+    inp.value = (!isNaN(n) && n !== 0) ? Math.round(n) : '';
+    inp.className = (!isNaN(n) && n !== 0) ? 'has-value' : 'zero';
+  });
+
+  document.getElementById('matrix').classList.add('history-mode');
+  if (!preview) {
+    document.getElementById('tl-label').style.display = 'none';
+  }
+  recalcAllTotals();
+}
+
+function recalcAllTotals() {
+  const sources = state.sources;
+  const days = daysInYear(state.year);
+
+  // recalc each visible month total row
+  const months = [...new Set(days.map(function(ds) { return new Date(ds).getMonth(); }))];
+  months.forEach(function(mo) {
+    const daysInMo = days.filter(function(ds) { return new Date(ds).getMonth() === mo; });
+    const moTotals = {};
+    sources.forEach(function(s) { moTotals[s.id] = 0; });
+    moTotals.row = 0;
+    daysInMo.forEach(function(ds) {
+      sources.forEach(function(s) {
+        const inp = document.querySelector('input[data-date="' + ds + '"][data-src="' + s.id + '"]');
+        const v = parseFloat(inp ? inp.value : '');
+        if (!isNaN(v) && v !== 0) { moTotals[s.id] += v; moTotals.row += v; }
+      });
+    });
+    const hdr = document.querySelector('tr.month-total-row[data-mo="' + mo + '"]');
+    if (!hdr) return;
+    const cells = hdr.querySelectorAll('td');
+    sources.forEach(function(s, i) {
+      const v = moTotals[s.id] || 0;
+      cells[i + 1].textContent = v !== 0 ? fmtNum(v) : '';
+      cells[i + 1].style.color = v !== 0 ? 'var(--accent2)' : 'var(--muted)';
+    });
+    cells[cells.length - 1].textContent = moTotals.row !== 0 ? fmtNum(moTotals.row) : '';
+  });
+
+  // recalc row totals
+  days.forEach(function(ds) {
+    const row = document.querySelector('tr[data-date-row="' + ds + '"]');
+    if (!row) return;
+    let total = 0;
+    row.querySelectorAll('input[data-date]').forEach(function(inp) {
+      const v = parseFloat(inp.value);
+      if (!isNaN(v)) total += v;
+    });
+    const last = row.lastElementChild;
+    last.textContent = total !== 0 ? fmtNum(total) : '';
+    last.className = total !== 0 ? 'm-total' : 'zero';
+  });
+}
+
+function resetViewDate() {
+  viewDate = null;
+  document.getElementById('tl-label').style.display = 'none';
+  document.getElementById('matrix').classList.remove('history-mode');
+  document.querySelectorAll('input[data-date][data-src]').forEach(function(inp) {
+    const key = inp.dataset.date + '|' + inp.dataset.src;
+    const cell = state.cells[key];
+    const v = cell ? parseFloat(cell.value) : NaN;
+    inp.value = (!isNaN(v) && v !== 0) ? Math.round(v) : '';
+    inp.className = (!isNaN(v) && v !== 0) ? 'has-value' : 'zero';
+  });
+  recalcAllTotals();
+}
+
+// double-click timeline to reset to live
+document.getElementById('timeline').addEventListener('dblclick', resetViewDate);
+
+// ── Error tooltips on past cells ─────────────────────────────────────────
+function showErrTooltip(e, date, srcId) {
+  const cell = state.cells[date + '|' + srcId];
+  if (!cell || !cell.history || cell.history.length === 0) return;
+
+  const tt = document.getElementById('err-tooltip');
+  const currentVal = parseFloat(cell.value);
+  const firstVal = parseFloat(cell.history[0].value !== '' ? cell.history[0].value : (cell.history[1] ? cell.history[1].value : cell.value));
+
+  let html = '';
+  // history list
+  const allVersions = cell.history.concat([{ value: cell.value, ts: new Date().toISOString(), current: true }]);
+  allVersions.forEach(function(h, i) {
+    const v = parseFloat(h.value);
+    const vStr = (!isNaN(v) && v !== 0) ? fmtNum(v) : '—';
+    const ts = h.current ? 'сейчас' : fmtTs(h.ts);
+    html += '<div class="err-tt-row"><span class="err-tt-ts">' + ts + '</span><span class="err-tt-val">' + vStr + '</span></div>';
+  });
+
+  // delta: current (fact) vs first (forecast)
+  if (!isNaN(currentVal) && !isNaN(firstVal) && firstVal !== 0) {
+    const delta = currentVal - firstVal;
+    const cls = delta > 0 ? 'err-tt-delta-neg' : delta < 0 ? 'err-tt-delta-pos' : 'err-tt-delta-zero';
+    const sign = delta > 0 ? '+' : '';
+    html += '<hr class="err-tt-sep">';
+    html += '<div class="err-tt-row"><span class="err-tt-ts">Δ прогноз→факт</span><span class="' + cls + '">' + sign + fmtNum(delta) + '</span></div>';
+  }
+
+  tt.innerHTML = html;
+  tt.style.display = 'block';
+  posErrTooltip(e);
+}
+
+function posErrTooltip(e) {
+  const tt = document.getElementById('err-tooltip');
+  let x = e.clientX + 12, y = e.clientY + 12;
+  if (x + tt.offsetWidth > window.innerWidth - 8) x = e.clientX - tt.offsetWidth - 8;
+  if (y + tt.offsetHeight > window.innerHeight - 8) y = e.clientY - tt.offsetHeight - 8;
+  tt.style.left = x + 'px';
+  tt.style.top = y + 'px';
+}
+
+function hideErrTooltip() {
+  document.getElementById('err-tooltip').style.display = 'none';
 }
 
 // ── Move overlay ───────────────────────────────────────────────────────
 let moveState = null; // { date, srcId, value, inputEl }
 
 function showMoveOverlay(inp, date, srcId) {
-  const v = parseFloat(inp.value);
-  if (isNaN(v) || v === 0) return;
-
   // hide previous highlight
-  if (moveState && moveState.inputEl) {
+  if (moveState && moveState.inputEl && moveState.inputEl !== inp) {
     moveState.inputEl.classList.remove('move-cell-highlight');
   }
 
-  moveState = { date: date, srcId: srcId, value: v, inputEl: inp };
-  inp.classList.add('move-cell-highlight');
+  const v = parseFloat(inp.value);
+  moveState = { date: date, srcId: srcId, value: isNaN(v) ? 0 : v, inputEl: inp };
+  if (!isNaN(v) && v !== 0) inp.classList.add('move-cell-highlight');
 
   const overlay = document.getElementById('move-overlay');
   const rect = inp.getBoundingClientRect();
-  overlay.style.left = (rect.left + rect.width / 2 - 16) + 'px';
-  overlay.style.top = (rect.top - 26) + 'px';
+  const upBtn = document.getElementById('move-up');
+  const dnBtn = document.getElementById('move-dn');
+  // up arrow above cell, down arrow below cell
+  upBtn.style.position = 'fixed';
+  upBtn.style.left = (rect.left + rect.width / 2 - 16) + 'px';
+  upBtn.style.top = (rect.top - 26) + 'px';
+  dnBtn.style.position = 'fixed';
+  dnBtn.style.left = (rect.left + rect.width / 2 - 16) + 'px';
+  dnBtn.style.top = (rect.bottom) + 'px';
   overlay.classList.add('visible');
 }
 
@@ -747,18 +1116,20 @@ function hideMoveOverlay() {
 
 function moveCell(direction) {
   if (!moveState) return;
+  const currentValue = parseFloat(moveState.inputEl ? moveState.inputEl.value : 0);
+  if (isNaN(currentValue) || currentValue === 0) return;
   const days = daysInYear(state.year);
   const idx = days.indexOf(moveState.date);
   const newIdx = idx + direction;
   if (newIdx < 0 || newIdx >= days.length) return;
 
   const newDate = days[newIdx];
-  const { srcId, value, date } = moveState;
+  const { srcId, date } = moveState;
 
   // clear old cell (save as empty, keeping history)
   setCell(date, srcId, '');
   // set new cell
-  setCell(newDate, srcId, String(value));
+  setCell(newDate, srcId, String(currentValue));
 
   // update DOM — find old input and clear
   const oldInp = document.querySelector('input[data-date="' + date + '"][data-src="' + srcId + '"]');
@@ -772,7 +1143,7 @@ function moveCell(direction) {
   // find new input and set
   const newInp = document.querySelector('input[data-date="' + newDate + '"][data-src="' + srcId + '"]');
   if (newInp) {
-    newInp.value = Math.round(value);
+    newInp.value = Math.round(currentValue);
     newInp.className = 'has-value';
     updateRowTotal(newInp.closest('tr'));
     // reposition overlay
@@ -781,9 +1152,10 @@ function moveCell(direction) {
     newInp.classList.add('move-cell-highlight');
     requestAnimationFrame(function() {
       const rect = newInp.getBoundingClientRect();
-      const overlay = document.getElementById('move-overlay');
-      overlay.style.left = (rect.left + rect.width / 2 - 16) + 'px';
-      overlay.style.top = (rect.top - 26) + 'px';
+      document.getElementById('move-up').style.top = (rect.top - 26) + 'px';
+      document.getElementById('move-up').style.left = (rect.left + rect.width / 2 - 16) + 'px';
+      document.getElementById('move-dn').style.top = (rect.bottom) + 'px';
+      document.getElementById('move-dn').style.left = (rect.left + rect.width / 2 - 16) + 'px';
       newInp.scrollIntoView({ block: 'nearest' });
     });
   }
