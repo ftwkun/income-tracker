@@ -1000,20 +1000,20 @@ function packData() {
   const bytes = new Uint8Array(buf, 0, pos);
   let bin = '';
   bytes.forEach(function(b) { bin += String.fromCharCode(b); });
-  return 'IT2:' + btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  return 'IT2:' + btoa(bin).replace(/\+/g,'-').replace(/\//g,'.').replace(/=/g,'');
 }
 
 function unpackData(str) {
   // support legacy IT1 format
   if (str.startsWith('IT1:')) {
-    const b64 = str.slice(4).replace(/-/g,'+').replace(/_/g,'/');
+    const b64 = str.slice(4).replace(/-/g,'+').replace(/\./g,'/');
     const bin = atob(b64);
     const bytes = new Uint8Array(bin.length);
     for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     return JSON.parse(new TextDecoder().decode(bytes));
   }
   if (!str.startsWith('IT2:')) throw new Error('bad format');
-  const b64 = str.slice(4).replace(/-/g,'+').replace(/_/g,'/');
+  const b64 = str.slice(4).replace(/-/g,'+').replace(/\./g,'/');
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -1081,7 +1081,9 @@ function doExport() {
 }
 
 function doImport() {
-  const input = document.getElementById('import-field').value.trim();
+  const raw = document.getElementById('import-field').value;
+  // strip newlines, spaces and non-printable chars
+  const input = raw.replace(/[^\w\-\.:]/g, '').trim();
   const field = document.getElementById('import-field');
   try {
     const newState = unpackData(input);
