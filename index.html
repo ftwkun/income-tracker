@@ -141,8 +141,30 @@ tr.col-total td { background: var(--surface) !important; border-top: 1px solid v
 tr.col-total td:first-child { color: var(--muted2); font-size: 10px; }
 .col-total-val { color: var(--warn); font-weight: 600; }
 tr.month-total-row td { background: rgba(34,211,238,0.04) !important; border-top: 1px solid rgba(34,211,238,0.15); border-bottom: 1px solid rgba(34,211,238,0.15); }
-tr.weekend td:first-child { color: #aaa; }
+tr.weekend td { background: rgba(251,191,36,0.04) !important; }
+tr.weekend td:first-child { color: #999; }
+tr.past.weekend td { background: rgba(251,191,36,0.025) !important; }
 tr.past.weekend td:first-child { color: #666; }
+tr.today.weekend td { background: rgba(74,222,128,0.08) !important; }
+
+/* move arrows overlay */
+#move-overlay {
+  position: fixed; z-index: 500;
+  display: none; flex-direction: column; align-items: center; gap: 0;
+  pointer-events: all;
+}
+#move-overlay.visible { display: flex; }
+.move-btn {
+  background: var(--surface2); border: 1px solid var(--border2);
+  color: var(--accent2); font-family: var(--mono); font-size: 14px;
+  width: 32px; height: 26px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.1s;
+}
+.move-btn:active { background: rgba(34,211,238,0.15); }
+.move-btn.up { border-radius: 4px 4px 0 0; border-bottom: none; }
+.move-btn.dn { border-radius: 0 0 4px 4px; }
+.move-cell-highlight { outline: 2px solid var(--accent2) !important; outline-offset: -1px; }
 
 /* ══════════════════════════════════════════
    DAY MODE
@@ -275,6 +297,42 @@ tr.past.weekend td:first-child { color: #666; }
   background: none; border: none; color: var(--muted);
   font-size: 20px; cursor: pointer;
 }
+#btn-settings {
+  font-family: var(--mono); font-size: 14px; padding: 4px 8px;
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  color: var(--muted); cursor: pointer;
+}
+#btn-settings:hover { border-color: var(--border2); color: var(--muted2); }
+#settings-panel {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.7);
+  display: none; align-items: flex-end;
+}
+#settings-panel.open { display: flex; }
+#settings-inner {
+  width: 100%; background: var(--surface);
+  border-radius: 16px 16px 0 0;
+  padding: 16px 16px 32px;
+  max-height: 80vh; overflow-y: auto;
+  position: relative;
+}
+#settings-inner h2 { font-family: var(--mono); font-size: 12px; color: var(--muted2); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 14px; }
+#btn-close-settings { position: absolute; top: 16px; right: 16px; background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; }
+.settings-label { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
+.settings-textarea {
+  width: 100%; background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 6px; color: var(--text); font-family: var(--mono); font-size: 10px;
+  padding: 8px; resize: vertical; min-height: 80px;
+}
+.settings-btn {
+  margin-top: 6px; width: 100%; padding: 9px;
+  background: none; border: 1px solid var(--border2); border-radius: 6px;
+  color: var(--muted2); font-family: var(--mono); font-size: 11px; cursor: pointer;
+  letter-spacing: 0.05em;
+}
+.settings-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+.settings-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+.settings-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
 
 /* ── History popup ── */
 #hist-popup {
@@ -309,6 +367,9 @@ tr.past.weekend td:first-child { color: #666; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
 input { -webkit-appearance: none; }
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type=number] { -moz-appearance: textfield; }
 input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
 </style>
 </head>
@@ -319,10 +380,28 @@ input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
     <button class="mode-btn active" id="btn-matrix" onclick="setMode('matrix')">матрица</button>
     <button class="mode-btn" id="btn-day" onclick="setMode('day')">день</button>
     <button id="btn-sources" onclick="openSources()">источники</button>
+    <button id="btn-settings" onclick="openSettings()">⚙</button>
   </div>
   <div id="content">
     <div id="matrix-wrap" style="display:block;"></div>
     <div id="day-wrap" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- Settings panel -->
+<div id="settings-panel" onclick="if(event.target===this)closeSettings()">
+  <div id="settings-inner">
+    <button id="btn-close-settings" onclick="closeSettings()">×</button>
+    <h2>Настройки</h2>
+    <div class="settings-label">Экспорт данных <span id="export-size" style="color:var(--muted);font-size:10px;"></span></div>
+    <textarea class="settings-textarea" id="export-field" readonly placeholder="нажмите кнопку ниже..."></textarea>
+    <button class="settings-btn" onclick="doExport()">скопировать данные</button>
+    <hr class="settings-divider">
+    <div class="settings-label">Импорт данных</div>
+    <textarea class="settings-textarea" id="import-field" placeholder="вставьте строку данных сюда..."></textarea>
+    <button class="settings-btn" onclick="doImport()">восстановить из строки</button>
+    <hr class="settings-divider">
+    <button class="settings-btn danger" onclick="doClear()">очистить все данные</button>
   </div>
 </div>
 
@@ -334,6 +413,12 @@ input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
     <div id="src-list"></div>
     <button id="btn-add-src" onclick="addSource()">+ добавить источник</button>
   </div>
+</div>
+
+<!-- Move overlay -->
+<div id="move-overlay">
+  <button class="move-btn up" id="move-up" onmousedown="event.preventDefault()" onclick="moveCell(-1)">↑</button>
+  <button class="move-btn dn" id="move-dn" onmousedown="event.preventDefault()" onclick="moveCell(1)">↓</button>
 </div>
 
 <!-- History popup -->
@@ -424,6 +509,23 @@ function activeSources(date) {
   });
 }
 
+const RU_HOLIDAYS_2026 = new Set([
+  '2026-01-01','2026-01-02','2026-01-03','2026-01-04','2026-01-05',
+  '2026-01-06','2026-01-07','2026-01-08','2026-01-09','2026-01-10','2026-01-11',
+  '2026-02-21','2026-02-22','2026-02-23',
+  '2026-03-07','2026-03-08','2026-03-09',
+  '2026-04-30','2026-05-01','2026-05-02','2026-05-03',
+  '2026-05-09','2026-05-10','2026-05-11',
+  '2026-06-12','2026-06-13','2026-06-14',
+  '2026-11-04',
+  '2026-12-31'
+]);
+
+function isNonWorkday(ds) {
+  const dow = new Date(ds).getDay();
+  return dow === 0 || dow === 6 || RU_HOLIDAYS_2026.has(ds);
+}
+
 // ── Mode ───────────────────────────────────────────────────────────────
 let mode = 'matrix';
 
@@ -438,6 +540,28 @@ function setMode(m) {
 }
 
 // ── Matrix ─────────────────────────────────────────────────────────────
+let collapsedMonths = {};
+// init: collapse all months except current
+(function() {
+  const currentMonth = new Date().getMonth();
+  for (var i = 0; i < 12; i++) {
+    if (i !== currentMonth) collapsedMonths[i] = true;
+  }
+})();
+
+function toggleMonth(mo) {
+  collapsedMonths[mo] = !collapsedMonths[mo];
+  const rows = document.querySelectorAll('tr[data-month="' + mo + '"]');
+  rows.forEach(function(r) {
+    r.style.display = collapsedMonths[mo] ? 'none' : '';
+  });
+  const hdr = document.querySelector('tr.month-total-row[data-mo="' + mo + '"]');
+  if (hdr) {
+    const arrow = hdr.querySelector('.mo-arrow');
+    if (arrow) arrow.textContent = collapsedMonths[mo] ? '▶' : '▼';
+  }
+}
+
 function renderMatrix() {
   const wrap = document.getElementById('matrix-wrap');
   const days = daysInYear(state.year);
@@ -452,7 +576,7 @@ function renderMatrix() {
   html += '</tr></thead><tbody>';
 
   // pre-calc month buckets
-  const monthTotals = {}; // month -> { srcId -> total, row: total }
+  const monthTotals = {};
   days.forEach(function(ds) {
     const mo = new Date(ds).getMonth();
     if (!monthTotals[mo]) { monthTotals[mo] = { row: 0 }; sources.forEach(function(s){ monthTotals[mo][s.id] = 0; }); }
@@ -462,35 +586,44 @@ function renderMatrix() {
     });
   });
 
+  function monthTotalRow(mo, placement) {
+    const mt = monthTotals[mo] || { row: 0 };
+    const collapsed = collapsedMonths[mo];
+    const arrow = placement === 'before' ? (collapsed ? '▶' : '▼') : '';
+    let r = '<tr class="month-total-row" data-mo="' + mo + '" onclick="toggleMonth(' + mo + ')" style="cursor:pointer;">';
+    r += '<td style="padding:4px 8px;color:var(--accent2);font-size:10px;font-weight:600;letter-spacing:0.05em;user-select:none;">' +
+      '<span class="mo-arrow" style="margin-right:4px;font-size:9px;">' + (placement === 'before' ? (collapsed ? '▶' : '▼') : '') + '</span>' +
+      MONTHS_RU[mo].slice(0,3).toUpperCase() + '</td>';
+    sources.forEach(function(s) {
+      const v = mt[s.id] || 0;
+      r += '<td style="padding:0 6px;text-align:right;font-family:var(--mono);font-size:10px;color:' + (v > 0 ? 'var(--accent2)' : 'var(--muted)') + ';font-weight:600;">' + (v > 0 ? fmtNum(v) : '') + '</td>';
+    });
+    r += '<td style="padding:0 8px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--warn);font-weight:700;">' + (mt.row > 0 ? fmtNum(mt.row) : '') + '</td>';
+    r += '</tr>';
+    return r;
+  }
+
   let prevMonth = -1;
   days.forEach(function(ds) {
     const d = new Date(ds);
     const mo = d.getMonth();
-    const dow = d.getDay(); // 0=вс, 6=сб
-    const isWeekend = dow === 0 || dow === 6;
+    const dow = d.getDay();
+    const isWeekend = isNonWorkday(ds);
     const isPast = ds < td0;
     const isToday = ds === td0;
 
-    // month total row before new month
-    if (mo !== prevMonth && prevMonth >= 0) {
-      const mt = monthTotals[prevMonth];
-      html += '<tr class="month-total-row">';
-      html += '<td style="padding:4px 8px;color:var(--accent2);font-size:10px;font-weight:600;letter-spacing:0.05em;">' + MONTHS_RU[prevMonth].slice(0,3).toUpperCase() + '</td>';
-      sources.forEach(function(s) {
-        const v = mt[s.id] || 0;
-        html += '<td style="padding:0 6px;text-align:right;font-family:var(--mono);font-size:10px;color:' + (v > 0 ? 'var(--accent2)' : 'var(--muted)') + ';font-weight:600;">' + (v > 0 ? fmtNum(v) : '') + '</td>';
-      });
-      html += '<td style="padding:0 8px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--warn);font-weight:700;">' + (mt.row > 0 ? fmtNum(mt.row) : '') + '</td>';
-      html += '</tr>';
+    // month total row at START of new month
+    if (mo !== prevMonth) {
+      html += monthTotalRow(mo, 'before');
     }
     prevMonth = mo;
 
+    const collapsed = collapsedMonths[mo];
     let cls = isPast ? 'past' : isToday ? 'today' : 'future';
     if (isWeekend) cls += ' weekend';
 
-    html += '<tr class="' + cls + '">';
-    const dateColor = isWeekend ? (isPast ? '#666' : '#aaa') : '';
-    html += '<td' + (dateColor ? ' style="color:' + dateColor + '"' : '') + '>' + fmtDate(ds) + '</td>';
+    html += '<tr class="' + cls + '" data-month="' + mo + '"' + (collapsed ? ' style="display:none"' : '') + '>';
+    html += '<td>' + fmtDate(ds) + '</td>';
     let rowTotal = 0;
     sources.forEach(function(s) {
       const cell = getCell(ds, s.id);
@@ -509,20 +642,7 @@ function renderMatrix() {
     html += '</tr>';
   });
 
-  // last month total
-  if (prevMonth >= 0) {
-    const mt = monthTotals[prevMonth];
-    html += '<tr class="month-total-row">';
-    html += '<td style="padding:4px 8px;color:var(--accent2);font-size:10px;font-weight:600;letter-spacing:0.05em;">' + MONTHS_RU[prevMonth].slice(0,3).toUpperCase() + '</td>';
-    sources.forEach(function(s) {
-      const v = mt[s.id] || 0;
-      html += '<td style="padding:0 6px;text-align:right;font-family:var(--mono);font-size:10px;color:' + (v > 0 ? 'var(--accent2)' : 'var(--muted)') + ';font-weight:600;">' + (v > 0 ? fmtNum(v) : '') + '</td>';
-    });
-    html += '<td style="padding:0 8px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--warn);font-weight:700;">' + (mt.row > 0 ? fmtNum(mt.row) : '') + '</td>';
-    html += '</tr>';
-  }
-
-  // year col totals
+  // year totals
   html += '<tr class="col-total"><td style="color:var(--accent2);font-size:10px;letter-spacing:0.05em;">ГОД</td>';
   let grandTotal = 0;
   sources.forEach(function(s) {
@@ -555,10 +675,134 @@ function renderMatrix() {
       totalCell.className = rowTotal > 0 ? 'm-total' : 'zero';
       const n = parseFloat(this.value);
       this.className = (!isNaN(n) && n !== 0) ? 'has-value' : 'zero';
+
+      // recalc month total row
+      const mo = new Date(this.dataset.date).getMonth();
+      const daysInMo = daysInYear(state.year).filter(function(ds) { return new Date(ds).getMonth() === mo; });
+      const moTotals = {};
+      sources.forEach(function(s) { moTotals[s.id] = 0; });
+      moTotals.row = 0;
+      daysInMo.forEach(function(ds) {
+        sources.forEach(function(s) {
+          const inp2 = document.querySelector('input[data-date="' + ds + '"][data-src="' + s.id + '"]');
+          const v = parseFloat(inp2 ? inp2.value : getCell(ds, s.id).value);
+          if (!isNaN(v) && v > 0) { moTotals[s.id] += v; moTotals.row += v; }
+        });
+      });
+      const hdr = document.querySelector('tr.month-total-row[data-mo="' + mo + '"]');
+      if (hdr) {
+        const cells = hdr.querySelectorAll('td');
+        // cells[0] = name, cells[1..n] = sources, cells[n+1] = row total
+        sources.forEach(function(s, i) {
+          const v = moTotals[s.id] || 0;
+          cells[i + 1].textContent = v > 0 ? fmtNum(v) : '';
+          cells[i + 1].style.color = v > 0 ? 'var(--accent2)' : 'var(--muted)';
+        });
+        cells[cells.length - 1].textContent = moTotals.row > 0 ? fmtNum(moTotals.row) : '';
+      }
     });
-    inp.addEventListener('focus', function() { this.select(); });
+    inp.addEventListener('focus', function() {
+      this.select();
+      const _v = parseFloat(this.value);
+      if (!isNaN(_v) && _v !== 0) showMoveOverlay(this, this.dataset.date, this.dataset.src);
+      else hideMoveOverlay();
+    });
   });
 }
+
+// ── Move overlay ───────────────────────────────────────────────────────
+let moveState = null; // { date, srcId, value, inputEl }
+
+function showMoveOverlay(inp, date, srcId) {
+  const v = parseFloat(inp.value);
+  if (isNaN(v) || v === 0) return;
+
+  // hide previous highlight
+  if (moveState && moveState.inputEl) {
+    moveState.inputEl.classList.remove('move-cell-highlight');
+  }
+
+  moveState = { date: date, srcId: srcId, value: v, inputEl: inp };
+  inp.classList.add('move-cell-highlight');
+
+  const overlay = document.getElementById('move-overlay');
+  const rect = inp.getBoundingClientRect();
+  overlay.style.left = (rect.left + rect.width / 2 - 16) + 'px';
+  overlay.style.top = (rect.top - 26) + 'px';
+  overlay.classList.add('visible');
+}
+
+function hideMoveOverlay() {
+  if (moveState && moveState.inputEl) {
+    moveState.inputEl.classList.remove('move-cell-highlight');
+  }
+  moveState = null;
+  document.getElementById('move-overlay').classList.remove('visible');
+}
+
+function moveCell(direction) {
+  if (!moveState) return;
+  const days = daysInYear(state.year);
+  const idx = days.indexOf(moveState.date);
+  const newIdx = idx + direction;
+  if (newIdx < 0 || newIdx >= days.length) return;
+
+  const newDate = days[newIdx];
+  const { srcId, value, date } = moveState;
+
+  // clear old cell (save as empty, keeping history)
+  setCell(date, srcId, '');
+  // set new cell
+  setCell(newDate, srcId, String(value));
+
+  // update DOM — find old input and clear
+  const oldInp = document.querySelector('input[data-date="' + date + '"][data-src="' + srcId + '"]');
+  if (oldInp) {
+    oldInp.value = '';
+    oldInp.className = 'zero';
+    // update old row total
+    updateRowTotal(oldInp.closest('tr'));
+  }
+
+  // find new input and set
+  const newInp = document.querySelector('input[data-date="' + newDate + '"][data-src="' + srcId + '"]');
+  if (newInp) {
+    newInp.value = Math.round(value);
+    newInp.className = 'has-value';
+    updateRowTotal(newInp.closest('tr'));
+    // reposition overlay
+    moveState.date = newDate;
+    moveState.inputEl = newInp;
+    newInp.classList.add('move-cell-highlight');
+    requestAnimationFrame(function() {
+      const rect = newInp.getBoundingClientRect();
+      const overlay = document.getElementById('move-overlay');
+      overlay.style.left = (rect.left + rect.width / 2 - 16) + 'px';
+      overlay.style.top = (rect.top - 26) + 'px';
+      newInp.scrollIntoView({ block: 'nearest' });
+    });
+  }
+}
+
+function updateRowTotal(row) {
+  if (!row) return;
+  let total = 0;
+  row.querySelectorAll('input[data-date]').forEach(function(i) {
+    const v = parseFloat(i.value); if (!isNaN(v)) total += v;
+  });
+  const last = row.lastElementChild;
+  last.textContent = total > 0 ? fmtNum(total) : '';
+  last.className = total > 0 ? 'm-total' : 'zero';
+}
+
+// close overlay on tap outside
+document.addEventListener('click', function(e) {
+  if (!moveState) return;
+  const overlay = document.getElementById('move-overlay');
+  if (!overlay.contains(e.target) && e.target !== moveState.inputEl) {
+    hideMoveOverlay();
+  }
+});
 
 // ── Day mode ───────────────────────────────────────────────────────────
 function renderDay() {
@@ -662,6 +906,202 @@ function isSourceActive(s, date) {
 
 function toggleDay(card) {
   card.classList.toggle('expanded');
+}
+
+// ── Settings & Pack/Unpack ─────────────────────────────────────────────
+const IT_EPOCH = new Date('2020-01-01').getTime();
+const MS_DAY = 86400000;
+
+function dateToDay16(ds) {
+  if (!ds) return -1;
+  return Math.round((new Date(ds).getTime() - IT_EPOCH) / MS_DAY);
+}
+function day16ToDate(d) {
+  if (d < 0) return '';
+  return new Date(IT_EPOCH + d * MS_DAY).toISOString().split('T')[0];
+}
+function encStr(s, maxBytes) {
+  const b = new TextEncoder().encode((s || '').slice(0, 20));
+  return b.slice(0, maxBytes);
+}
+
+function packData() {
+  const sources = state.sources || [];
+  const cells = state.cells || {};
+
+  // collect non-empty cells
+  const cellEntries = [];
+  Object.keys(cells).forEach(function(key) {
+    const cell = cells[key];
+    const v = parseFloat(cell.value);
+    if (isNaN(v) || v === 0) return;
+    const parts = key.split('|');
+    if (parts.length !== 2) return;
+    const ds = parts[0], srcId = parts[1];
+    const srcIdx = sources.findIndex(function(s) { return s.id === srcId; });
+    if (srcIdx < 0) return;
+    cellEntries.push({ ds, srcIdx, v, history: cell.history || [] });
+  });
+
+  // estimate size
+  // header: 2 (magic+ver) + 1 (src count)
+  // per source: 1 (codelen) + code bytes + 2 (start) + 2 (end) = ~12
+  // per cell: 1 (srcIdx) + 2 (day) + 4 (value) + 1 (hist count) + hist*(4+3) = ~8+
+  let size = 4 + 1 + sources.length * 14;
+  cellEntries.forEach(function(c) { size += 8 + c.history.length * 7; });
+  size += 4; // safety
+
+  const buf = new ArrayBuffer(size + 512);
+  const dv = new DataView(buf);
+  let pos = 0;
+
+  dv.setUint8(pos++, 0x49); // 'I'
+  dv.setUint8(pos++, 0x54); // 'T'
+  dv.setUint8(pos++, 0x02); // version 2
+  dv.setInt16(pos, state.year || new Date().getFullYear(), false); pos += 2;
+
+  // sources
+  dv.setUint8(pos++, sources.length);
+  sources.forEach(function(s) {
+    const code = new TextEncoder().encode((s.code || '').slice(0, 6));
+    dv.setUint8(pos++, code.length);
+    code.forEach(function(b) { dv.setUint8(pos++, b); });
+    dv.setInt16(pos, dateToDay16(s.start), false); pos += 2;
+    dv.setInt16(pos, dateToDay16(s.end), false); pos += 2;
+    // id as short hash (4 bytes)
+    let h = 0;
+    for (var i = 0; i < s.id.length; i++) h = (h * 31 + s.id.charCodeAt(i)) & 0xFFFFFFFF;
+    dv.setInt32(pos, h, false); pos += 4;
+  });
+
+  // cells
+  dv.setUint16(pos, cellEntries.length, false); pos += 2;
+  cellEntries.forEach(function(c) {
+    dv.setUint8(pos++, c.srcIdx);
+    dv.setInt16(pos, dateToDay16(c.ds), false); pos += 2;
+    dv.setInt32(pos, Math.round(c.v), false); pos += 4;
+    const hist = c.history.filter(function(h) { return h.value !== '' && !isNaN(parseFloat(h.value)); });
+    dv.setUint8(pos++, Math.min(hist.length, 15));
+    hist.slice(-15).forEach(function(h) {
+      dv.setInt32(pos, Math.round(parseFloat(h.value)), false); pos += 4;
+      // timestamp: minutes since epoch (3 bytes = 16M minutes = 30 years)
+      const mins = Math.round(new Date(h.ts).getTime() / 60000);
+      dv.setUint8(pos++, (mins >> 16) & 0xFF);
+      dv.setUint8(pos++, (mins >> 8) & 0xFF);
+      dv.setUint8(pos++, mins & 0xFF);
+    });
+  });
+
+  const bytes = new Uint8Array(buf, 0, pos);
+  let bin = '';
+  bytes.forEach(function(b) { bin += String.fromCharCode(b); });
+  return 'IT2:' + btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+
+function unpackData(str) {
+  // support legacy IT1 format
+  if (str.startsWith('IT1:')) {
+    const b64 = str.slice(4).replace(/-/g,'+').replace(/_/g,'/');
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+  if (!str.startsWith('IT2:')) throw new Error('bad format');
+  const b64 = str.slice(4).replace(/-/g,'+').replace(/_/g,'/');
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const dv = new DataView(bytes.buffer);
+  let pos = 0;
+
+  if (dv.getUint8(pos++) !== 0x49 || dv.getUint8(pos++) !== 0x54) throw new Error('bad magic');
+  const ver = dv.getUint8(pos++);
+  const year = dv.getInt16(pos, false); pos += 2;
+
+  const srcCount = dv.getUint8(pos++);
+  const sources = [];
+  for (var i = 0; i < srcCount; i++) {
+    const clen = dv.getUint8(pos++);
+    const codeBytes = bytes.slice(pos, pos + clen); pos += clen;
+    const code = new TextDecoder().decode(codeBytes);
+    const start = day16ToDate(dv.getInt16(pos, false)); pos += 2;
+    const end = day16ToDate(dv.getInt16(pos, false)); pos += 2;
+    const hash = dv.getInt32(pos, false); pos += 4;
+    sources.push({ id: 'src_' + hash, code: code, name: '', start: start, end: end });
+  }
+
+  const cellCount = dv.getUint16(pos, false); pos += 2;
+  const cells = {};
+  for (var j = 0; j < cellCount; j++) {
+    const srcIdx = dv.getUint8(pos++);
+    const ds = day16ToDate(dv.getInt16(pos, false)); pos += 2;
+    const value = String(dv.getInt32(pos, false)); pos += 4;
+    const histCount = dv.getUint8(pos++);
+    const history = [];
+    for (var k = 0; k < histCount; k++) {
+      const hval = String(dv.getInt32(pos, false)); pos += 4;
+      const mins = (dv.getUint8(pos) << 16) | (dv.getUint8(pos+1) << 8) | dv.getUint8(pos+2); pos += 3;
+      const ts = new Date(mins * 60000).toISOString();
+      history.push({ value: hval, ts: ts });
+    }
+    if (srcIdx < sources.length) {
+      const key = ds + '|' + sources[srcIdx].id;
+      cells[key] = { value: value, history: history };
+    }
+  }
+
+  return { sources: sources, cells: cells, year: year };
+}
+
+function openSettings() {
+  document.getElementById('export-field').value = '';
+  document.getElementById('import-field').value = '';
+  // show size info
+  const packed = packData();
+  document.getElementById('export-field').value = packed;
+  document.getElementById('export-size').textContent = packed.length + ' б';
+  document.getElementById('settings-panel').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settings-panel').classList.remove('open');
+}
+
+function doExport() {
+  const field = document.getElementById('export-field');
+  field.select();
+  try { document.execCommand('copy'); } catch(e) {}
+  field.style.borderColor = 'var(--accent)';
+  setTimeout(function() { field.style.borderColor = ''; }, 1500);
+}
+
+function doImport() {
+  const input = document.getElementById('import-field').value.trim();
+  const field = document.getElementById('import-field');
+  try {
+    const newState = unpackData(input);
+    state = newState;
+    save();
+    field.style.borderColor = 'var(--accent)';
+    setTimeout(function() {
+      field.style.borderColor = '';
+      closeSettings();
+      if (mode === 'matrix') renderMatrix();
+      else renderDay();
+    }, 800);
+  } catch(e) {
+    field.style.borderColor = 'var(--danger)';
+    setTimeout(function() { field.style.borderColor = ''; }, 1500);
+  }
+}
+
+function doClear() {
+  if (!confirm('Очистить все данные?')) return;
+  state = { sources: [], cells: {}, year: new Date().getFullYear() };
+  save();
+  closeSettings();
+  if (mode === 'matrix') renderMatrix();
+  else renderDay();
 }
 
 // ── Sources ────────────────────────────────────────────────────────────
