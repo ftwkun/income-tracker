@@ -858,26 +858,27 @@ function renderTimeline(days) {
   tl.style.display = 'block';
   track.innerHTML = '';
 
-  // collect all edit timestamps
-  const editTimes = []; // {ts, ds}
+  // collect all edit timestamps from history only
+  const editTimes = [];
   Object.keys(state.cells).forEach(function(key) {
     const cell = state.cells[key];
     if (cell.history) {
       cell.history.forEach(function(h) {
-        editTimes.push({ ts: new Date(h.ts).getTime() });
+        if (!h.ts) return;
+        const t = new Date(h.ts).getTime();
+        if (!isNaN(t) && t > 0) editTimes.push(t);
       });
     }
-    if (cell.value) editTimes.push({ ts: Date.now() });
   });
 
   if (editTimes.length === 0) return;
 
-  const minTs = Math.min.apply(null, editTimes.map(function(e) { return e.ts; }));
-  const maxTs = Date.now();
+  const minTs = Math.min.apply(null, editTimes);
+  const maxTs = Math.max.apply(null, editTimes);
   const range = maxTs - minTs || 1;
 
   // unique timestamps → markers
-  const uniqueTs = [...new Set(editTimes.map(function(e) { return e.ts; }))].sort();
+  const uniqueTs = [...new Set(editTimes)].sort(function(a,b){return a-b;});
   uniqueTs.forEach(function(ts) {
     const pct = (ts - minTs) / range * 100;
     const marker = document.createElement('div');
@@ -945,15 +946,16 @@ function tlMove(clientY) {
 }
 
 function getMinTs() {
-  let min = Date.now();
+  const times = [];
   Object.keys(state.cells).forEach(function(key) {
     const cell = state.cells[key];
     if (cell.history) cell.history.forEach(function(h) {
+      if (!h.ts) return;
       const t = new Date(h.ts).getTime();
-      if (t < min) min = t;
+      if (!isNaN(t) && t > 0) times.push(t);
     });
   });
-  return min;
+  return times.length ? Math.min.apply(null, times) : Date.now() - 86400000;
 }
 
 function setViewDate(isoStr, preview) {
