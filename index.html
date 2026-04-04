@@ -482,6 +482,8 @@ input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
     <button class="settings-btn" onclick="doImport()">восстановить из строки</button>
     <hr class="settings-divider">
     <button class="settings-btn danger" onclick="doClear()">очистить все данные</button>
+    <hr class="settings-divider">
+    <button class="settings-btn" onclick="doClearHistory()">очистить историю изменений</button>
   </div>
 </div>
 
@@ -1493,6 +1495,16 @@ function doImport() {
     field.style.borderColor = 'var(--danger)';
     setTimeout(function() { field.style.borderColor = ''; }, 1500);
   }
+}
+
+function doClearHistory() {
+  if (!confirm('Очистить историю изменений? Значения в ячейках останутся.')) return;
+  Object.keys(state.cells).forEach(function(key) {
+    if (state.cells[key].history) state.cells[key].history = [];
+  });
+  save();
+  closeSettings();
+  renderMatrix();
 }
 
 function doClear() {
