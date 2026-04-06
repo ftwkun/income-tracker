@@ -274,6 +274,10 @@ tr.today.weekend td { background: rgba(74,222,128,0.08) !important; }
   color: var(--warn); font-weight: 600; margin-left: auto;
 }
 .day-total.zero { color: var(--muted); font-weight: 400; }
+.day-spend-hdr {
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  color: rgba(248,113,113,0.85);
+}
 .day-chevron { color: var(--muted); font-size: 10px; transition: transform 0.2s; }
 .day-card.expanded .day-chevron { transform: rotate(90deg); }
 
@@ -309,11 +313,24 @@ tr.today.weekend td { background: rgba(74,222,128,0.08) !important; }
   cursor: pointer; padding: 2px 4px;
   font-family: var(--mono);
 }
+.entry-input.spend { color: rgba(248,113,113,0.7); }
+.entry-input.spend:focus { color: var(--danger); }
+.entry-input.spend.has-value { color: rgba(248,113,113,0.9); }
 .entry-hist-btn:hover { color: var(--muted2); }
 
 /* ── Source inactive overlay ── */
 .entry-row.inactive .entry-code { color: var(--muted); opacity: 0.4; }
 .entry-row.inactive .entry-input { opacity: 0.3; }
+
+/* ── Matrix day detail row ── */
+tr.matrix-day-detail > td { padding: 8px 14px 12px; background: rgba(30,41,59,0.6); border-bottom: 1px solid var(--border2); }
+.mdd-wrap { display: flex; gap: 24px; align-items: flex-start; }
+.mdd-col { display: flex; flex-direction: column; gap: 0; min-width: 140px; }
+.mdd-col-title { font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
+.mdd-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--border); }
+.mdd-row:last-child { border-bottom: none; }
+#matrix.sources-collapsed tr[data-date-row] td:first-child { cursor: pointer; user-select: none; }
+#matrix.sources-collapsed tr[data-date-row] td:first-child:hover { color: var(--accent2); }
 
 /* ══════════════════════════════════════════
    SOURCES PANEL
@@ -336,8 +353,12 @@ tr.today.weekend td { background: rgba(74,222,128,0.08) !important; }
   margin-bottom: 14px;
 }
 .src-item {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   padding: 8px 0; border-bottom: 1px solid var(--border);
+}
+.src-nobal {
+  width: 100%; font-size: 10px; color: var(--muted); cursor: pointer;
+  display: flex; align-items: center; gap: 5px; padding-left: 2px;
 }
 .src-code-input {
   font-family: var(--mono); font-size: 13px; font-weight: 600;
@@ -376,6 +397,13 @@ tr.today.weekend td { background: rgba(74,222,128,0.08) !important; }
   color: var(--muted); cursor: pointer;
 }
 #btn-settings:hover { border-color: var(--border2); color: var(--muted2); }
+#btn-collapse-src {
+  font-family: var(--mono); font-size: 14px; padding: 4px 8px;
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  color: var(--muted); cursor: pointer;
+}
+#btn-collapse-src:hover { border-color: var(--border2); color: var(--muted2); }
+#btn-collapse-src.active { color: var(--accent2); border-color: var(--accent2); }
 #settings-panel {
   position: fixed; inset: 0; z-index: 200;
   background: rgba(0,0,0,0.7);
@@ -406,6 +434,14 @@ tr.today.weekend td { background: rgba(74,222,128,0.08) !important; }
 .settings-btn:hover { border-color: var(--accent2); color: var(--accent2); }
 .settings-btn.danger:hover { border-color: var(--danger); color: var(--danger); }
 .settings-divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+#matrix.sources-collapsed .m-cell { display: none; }
+#matrix:not(.sources-collapsed) thead th.col-spend,
+#matrix:not(.sources-collapsed) thead th.col-income-total,
+#matrix:not(.sources-collapsed) thead th.col-morning,
+#matrix:not(.sources-collapsed) thead th.col-evening { display: none; }
+#matrix.sources-collapsed thead th:not(:first-child):not(.col-spend):not(.col-income-total):not(.col-morning):not(.col-evening):not(.col-row-total) { display: none; }
+#matrix.sources-collapsed tr.month-total-row td:not(:first-child):not(.col-row-total):not(.col-spend):not(.col-income-total):not(.col-morning):not(.col-evening) { display: none; }
+#matrix.sources-collapsed tr.col-total td:not(:first-child):not(.col-row-total):not(.col-spend):not(.col-income-total):not(.col-morning):not(.col-evening) { display: none; }
 
 /* ── History popup ── */
 #hist-popup {
@@ -439,11 +475,72 @@ tr.today.weekend td { background: rgba(74,222,128,0.08) !important; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
-input { -webkit-appearance: none; }
+input:not([type="checkbox"]) { -webkit-appearance: none; }
 input[type=number]::-webkit-inner-spin-button,
 input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type=number] { -moz-appearance: textfield; }
 input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
+
+/* ── Forecast panel ── */
+#forecast-panel, #inc-forecast-panel {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.75);
+  display: none; align-items: flex-end;
+}
+#forecast-panel.open, #inc-forecast-panel.open { display: flex; }
+#forecast-inner, #inc-forecast-inner {
+  width: 100%; background: var(--surface);
+  border-radius: 16px 16px 0 0;
+  max-height: 90vh; overflow-y: auto;
+  position: relative;
+}
+#btn-close-forecast { position: absolute; top: 14px; right: 14px; background: none; border: none; color: var(--muted); font-size: 20px; cursor: pointer; }
+.fc-section { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.fc-section-title { font-family: var(--mono); font-size: 10px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+.fc-field { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.fc-field label { font-family: var(--mono); font-size: 11px; color: var(--muted2); white-space: nowrap; }
+.fc-input { flex: 1; background: var(--surface2); border: 1px solid var(--border2); border-radius: 4px; color: var(--text); font-family: var(--mono); font-size: 12px; padding: 5px 8px; min-width: 0; }
+.fc-input:focus { outline: none; border-color: var(--accent2); }
+.fc-entry { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+.fc-entry-date { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; color: var(--muted2); font-family: var(--mono); font-size: 11px; padding: 4px 6px; width: 110px; }
+.fc-entry-sum { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; color: var(--accent2); font-family: var(--mono); font-size: 11px; padding: 4px 6px; width: 80px; text-align: right; }
+.fc-entry-label { background: none; border: none; border-bottom: 1px solid var(--border); color: var(--text); font-family: var(--mono); font-size: 11px; padding: 4px 2px; flex: 1; min-width: 60px; }
+.fc-entry-label:focus { outline: none; border-color: var(--accent2); }
+.fc-freq { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 2px; }
+.fc-freq-btn { background: none; border: 1px solid var(--border); border-radius: 3px; color: var(--muted); font-family: var(--mono); font-size: 9px; padding: 2px 6px; cursor: pointer; }
+.fc-freq-btn.active { border-color: var(--accent2); color: var(--accent2); background: rgba(34,211,238,0.08); }
+.fc-del { background: none; border: none; color: var(--muted); font-size: 16px; cursor: pointer; padding: 0 4px; flex-shrink: 0; }
+.fc-del:hover { color: var(--danger); }
+.fc-add-btn { width: 100%; background: none; border: 1px dashed var(--border2); border-radius: 6px; padding: 8px; color: var(--muted); font-family: var(--mono); font-size: 11px; cursor: pointer; margin-top: 4px; }
+.fc-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+.fc-calc-btn { display: block; margin: 12px 16px 24px; width: calc(100% - 32px); background: var(--accent); border: none; border-radius: 8px; color: #000; font-family: var(--mono); font-size: 13px; font-weight: 700; padding: 12px; cursor: pointer; }
+.fc-badge { font-family: var(--mono); font-size: 10px; color: var(--accent); background: rgba(74,222,128,0.1); border: 1px solid rgba(74,222,128,0.2); border-radius: 4px; padding: 2px 6px; }
+
+/* sticky total col right */
+#matrix th.col-row-total,
+#matrix td.col-row-total {
+  position: sticky; right: 0; z-index: 2;
+  background: var(--bg);
+  border-left: 1px solid var(--border2);
+}
+#matrix thead th.col-row-total { background: var(--surface); z-index: 4; }
+#matrix tr.today td.col-row-total { background: var(--today-bg) !important; }
+#matrix tr.month-total-row td.col-row-total { background: rgba(34,211,238,0.04) !important; }
+#matrix tr.col-total td.col-row-total { background: var(--surface) !important; }
+#matrix tr.weekend td.col-row-total { background: rgba(251,191,36,0.04) !important; }
+.col-spend, .col-income-total, .col-morning, .col-evening { display: none; }
+/* mo-sum headers always hidden */
+thead th.mo-sum { display: none; }
+/* collapsed mode: show day-row extra cols + hide sources */
+#matrix.sources-collapsed .col-spend,
+#matrix.sources-collapsed .col-income-total,
+#matrix.sources-collapsed .col-morning,
+#matrix.sources-collapsed .col-evening { display: table-cell; }
+td.col-spend { padding: 0; width: 64px; min-width: 64px; }
+.col-spend input { width: 64px; height: 26px; background: none; border: none; outline: none; font-family: var(--mono); font-size: 11px; color: rgba(248,113,113,0.7); text-align: right; padding: 0 6px; }
+.col-spend input:focus { background: rgba(248,113,113,0.08); color: var(--danger); }
+.col-spend input.has-value { color: rgba(248,113,113,0.8); }
+td.col-income-total, td.col-morning, td.col-evening { padding: 0 6px; text-align: right; font-family: var(--mono); font-size: 11px; width: 64px; min-width: 64px; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -452,7 +549,10 @@ input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
     <h1>income //</h1>
     <button class="mode-btn active" id="btn-matrix" onclick="setMode('matrix')">матрица</button>
     <button class="mode-btn" id="btn-day" onclick="setMode('day')">день</button>
+    <button class="mode-btn" id="btn-forecast" onclick="openForecast()">прогноз трат</button>
+    <button class="mode-btn" id="btn-inc-forecast" onclick="openIncForecast()">прогноз доходов</button>
     <button id="btn-sources" onclick="openSources()">источники</button>
+    <button id="btn-collapse-src" onclick="toggleSourcesCols()" title="свернуть источники">⊟</button>
     <button id="btn-settings" onclick="openSettings()">⚙</button>
   </div>
   <div id="content">
@@ -487,6 +587,59 @@ input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
   </div>
 </div>
 
+<!-- Forecast panel -->
+<div id="forecast-panel" onclick="if(event.target===this)closeForecast()">
+  <div id="forecast-inner">
+    <button id="btn-close-forecast" onclick="closeForecast()">×</button>
+    <h2 style="padding:16px 16px 12px;">прогноз // траты</h2>
+
+    <div class="fc-section">
+      <div class="fc-section-title">стартовый баланс</div>
+      <div class="fc-field">
+        <label>дата</label>
+        <input type="date" class="fc-input" id="fc-bal-date" style="max-width:130px;">
+        <input type="number" class="fc-input" id="fc-bal-val" placeholder="сумма" style="max-width:110px;" inputmode="numeric">
+      </div>
+    </div>
+
+    <div class="fc-section">
+      <div class="fc-section-title">
+        <span>лимит / день</span>
+      </div>
+      <div class="fc-field">
+        <label>₽ / день</label>
+        <input type="number" class="fc-input" id="fc-limit" placeholder="авто" inputmode="numeric">
+      </div>
+    </div>
+
+    <div class="fc-section">
+      <div class="fc-section-title">
+        <span>крупные траты</span>
+        <button class="fc-add-btn" style="width:auto;margin:0;padding:2px 8px;" onclick="fcAddExpense()">+ добавить</button>
+      </div>
+      <div id="fc-expenses"></div>
+    </div>
+
+    <button class="fc-calc-btn" onclick="fcCalc()">рассчитать →</button>
+  </div>
+</div>
+
+<!-- Income forecast panel -->
+<div id="inc-forecast-panel" onclick="if(event.target===this)closeIncForecast()">
+  <div id="inc-forecast-inner">
+    <button id="btn-close-inc-forecast" onclick="closeIncForecast()">×</button>
+    <h2 style="padding:16px 16px 12px;">прогноз доходов</h2>
+    <div class="fc-section">
+      <div class="fc-section-title">
+        <span>поступления</span>
+        <button class="fc-add-btn" style="width:auto;margin:0;padding:2px 8px;" onclick="fcAddIncome()">+ добавить</button>
+      </div>
+      <div id="fc-incomes"></div>
+    </div>
+    <button class="fc-calc-btn" style="background:var(--accent2);" onclick="fcIncCalc()">рассчитать →</button>
+  </div>
+</div>
+
 <!-- Sources panel -->
 <div id="sources-panel" onclick="if(event.target===this)closeSources()">
   <div id="sources-inner">
@@ -515,7 +668,7 @@ input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
 <script>
 // ── State ──────────────────────────────────────────────────────────────
 const STORE_KEY = 'income_tracker_v1';
-let state = { sources: [], cells: {}, year: new Date().getFullYear() };
+let state = { sources: [], cells: {}, spends: {}, year: new Date().getFullYear(), fc: { balDate: '', balVal: '', limit: '', expenses: [] } };
 
 function load() {
   try {
@@ -524,11 +677,15 @@ function load() {
   } catch(e) {}
   if (!state.sources) state.sources = [];
   if (!state.cells) state.cells = {};
+  if (!state.spends) state.spends = {};
   if (!state.year) state.year = new Date().getFullYear();
+  if (!state.fc) state.fc = { balDate: '', balVal: '', limit: '', expenses: [], incomes: [] };
+  if (!state.fc.incomes) state.fc.incomes = [];
+  if (state.collapsedMonths) collapsedMonths = state.collapsedMonths;
 }
 
 function save() {
-  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch(e) {}
 }
 
 function cellKey(date, srcId) { return date + '|' + srcId; }
@@ -550,20 +707,32 @@ function setCell(date, srcId, value) {
 }
 
 // ── Date helpers ───────────────────────────────────────────────────────
-function today() { return new Date().toISOString().split('T')[0]; }
+function localDateStr(d) {
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return y + '-' + mo + '-' + dd;
+}
+
+function today() { return localDateStr(new Date()); }
 
 function daysInYear(year) {
   const days = [];
   const d = new Date(year, 0, 1);
   while (d.getFullYear() === year) {
-    days.push(d.toISOString().split('T')[0]);
+    days.push(localDateStr(d));
     d.setDate(d.getDate() + 1);
   }
   return days;
 }
 
+function parseLocalDate(ds) {
+  const p = ds.split('-');
+  return new Date(+p[0], +p[1] - 1, +p[2]);
+}
+
 function fmtDate(ds) {
-  const d = new Date(ds);
+  const d = parseLocalDate(ds);
   const dd = d.getDate();
   const mo = ['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'][d.getMonth()];
   const dow = ['вс','пн','вт','ср','чт','пт','сб'][d.getDay()];
@@ -623,16 +792,164 @@ function setMode(m) {
 
 // ── Matrix ─────────────────────────────────────────────────────────────
 let collapsedMonths = {};
-// init: collapse all months except current
+// init: collapse all months except current, restore from state
 (function() {
   const currentMonth = new Date().getMonth();
-  for (var i = 0; i < 12; i++) {
-    if (i !== currentMonth) collapsedMonths[i] = true;
+  if (state.collapsedMonths) {
+    collapsedMonths = state.collapsedMonths;
+  } else {
+    for (var i = 0; i < 12; i++) {
+      if (i !== currentMonth) collapsedMonths[i] = true;
+    }
   }
 })();
 
+function toggleDayDetail(e, td) {
+  if (!document.getElementById('matrix').classList.contains('sources-collapsed')) return;
+  const tr = td.closest('tr');
+  const ds = tr.dataset.dateRow;
+  const existing = tr.nextElementSibling;
+  if (existing && existing.classList.contains('matrix-day-detail')) {
+    existing.remove();
+    tr.classList.remove('mdd-open');
+    return;
+  }
+  tr.classList.add('mdd-open');
+
+  const colCount = tr.querySelectorAll('td').length;
+  const detailTr = document.createElement('tr');
+  detailTr.className = 'matrix-day-detail';
+
+  const outerTd = document.createElement('td');
+  outerTd.colSpan = colCount;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'mdd-wrap';
+
+  // ── Колонка поступлений ──
+  const incCol = document.createElement('div');
+  incCol.className = 'mdd-col';
+  const incTitle = document.createElement('div');
+  incTitle.className = 'mdd-col-title';
+  incTitle.textContent = 'поступления';
+  incCol.appendChild(incTitle);
+
+  state.sources.forEach(function(s) {
+    const cell = getCell(ds, s.id);
+    const n = parseFloat(cell.value);
+    const hasVal = !isNaN(n) && n !== 0;
+    const row = document.createElement('div');
+    row.className = 'mdd-row' + (isSourceActive(s, ds) ? '' : ' inactive');
+    const code = document.createElement('span');
+    code.className = 'entry-code';
+    code.textContent = s.code;
+    const inp = document.createElement('input');
+    inp.className = 'entry-input mdd-inp' + (hasVal ? ' has-value' : '');
+    inp.type = 'number'; inp.inputMode = 'numeric';
+    inp.dataset.date = ds; inp.dataset.src = s.id;
+    inp.value = hasVal ? Math.round(n) : '';
+    inp.placeholder = '—';
+    inp.addEventListener('focus', function() { this.select(); });
+    inp.addEventListener('keydown', function(ev) { if (ev.key === 'Enter') this.blur(); });
+    inp.addEventListener('change', function() {
+      setCell(this.dataset.date, this.dataset.src, this.value);
+      const n2 = parseFloat(this.value);
+      this.className = 'entry-input mdd-inp' + ((!isNaN(n2) && n2 !== 0) ? ' has-value' : '');
+      const mx = document.querySelector('input[data-date="' + ds + '"][data-src="' + s.id + '"]:not(.mdd-inp)');
+      if (mx) { mx.value = this.value; mx.className = (!isNaN(n2) && n2 !== 0) ? 'has-value' : 'zero'; }
+      recalcAllTotals();
+    });
+    row.appendChild(code); row.appendChild(inp);
+    incCol.appendChild(row);
+  });
+
+  // ── Колонка трат ──
+  const spendCol = document.createElement('div');
+  spendCol.className = 'mdd-col';
+  const spendTitle = document.createElement('div');
+  spendTitle.className = 'mdd-col-title';
+  spendTitle.textContent = 'траты';
+  spendCol.appendChild(spendTitle);
+
+  // ТРТ из fc.expenses
+  const dayExps = buildDayExpensesMap(daysInYear(state.year))[ds] || [];
+  dayExps.forEach(function(e) {
+    const eRow = document.createElement('div');
+    eRow.className = 'mdd-row';
+    const eLbl = document.createElement('span');
+    eLbl.style.cssText = 'flex:1;font-family:var(--mono);font-size:10px;color:var(--muted2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100px;';
+    eLbl.textContent = e.label || '—';
+    const eInp = document.createElement('input');
+    eInp.className = 'entry-input spend has-value mdd-inp';
+    eInp.type = 'number'; eInp.inputMode = 'numeric';
+    eInp.dataset.expIdx = e.expIdx;
+    eInp.value = Math.round(e.sum);
+    eInp.placeholder = '—';
+    eInp.addEventListener('focus', function() { this.select(); });
+    eInp.addEventListener('keydown', function(ev) { if (ev.key === 'Enter') this.blur(); });
+    eInp.addEventListener('change', function() {
+      const idx = parseInt(this.dataset.expIdx);
+      const v = parseFloat(this.value);
+      state.fc.expenses[idx].sum = (!isNaN(v) && v > 0) ? String(Math.round(v)) : '';
+      this.className = 'entry-input spend mdd-inp' + ((!isNaN(v) && v > 0) ? ' has-value' : '');
+      save(); recalcAllTotals();
+    });
+    eRow.appendChild(eLbl); eRow.appendChild(eInp);
+    spendCol.appendChild(eRow);
+  });
+
+  // лимит (read-only)
+  const limitV = parseFloat(state.fc && state.fc.limit) || 0;
+  if (limitV > 0) {
+    const limRow = document.createElement('div');
+    limRow.className = 'mdd-row';
+    const limLbl = document.createElement('span');
+    limLbl.style.cssText = 'flex:1;font-family:var(--mono);font-size:10px;color:var(--warn);';
+    limLbl.textContent = 'лимит';
+    const limVal = document.createElement('span');
+    limVal.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;color:rgba(251,191,36,0.85);';
+    limVal.textContent = '−' + fmtNum(limitV);
+    limRow.appendChild(limLbl); limRow.appendChild(limVal);
+    spendCol.appendChild(limRow);
+  }
+
+  // сумма трат — ручной ввод
+  const spendV = parseFloat(state.spends[ds]) || 0;
+  const spRow = document.createElement('div');
+  spRow.className = 'mdd-row';
+  const spLbl = document.createElement('span');
+  spLbl.style.cssText = 'flex:1;font-family:var(--mono);font-size:10px;color:var(--muted);';
+  spLbl.textContent = 'сумма трат';
+  const spInp = document.createElement('input');
+  spInp.className = 'entry-input spend mdd-inp' + (spendV ? ' has-value' : '');
+  spInp.type = 'number'; spInp.inputMode = 'numeric';
+  spInp.dataset.spendDate = ds;
+  spInp.value = spendV ? Math.round(spendV) : '';
+  spInp.placeholder = '—';
+  spInp.addEventListener('focus', function() { this.select(); });
+  spInp.addEventListener('keydown', function(ev) { if (ev.key === 'Enter') this.blur(); });
+  spInp.addEventListener('change', function() {
+    const v = parseFloat(this.value);
+    if (!isNaN(v) && v > 0) state.spends[ds] = v; else delete state.spends[ds];
+    this.className = 'entry-input spend mdd-inp' + ((!isNaN(v) && v > 0) ? ' has-value' : '');
+    const mx = document.querySelector('input[data-spend-date="' + ds + '"]:not(.mdd-inp)');
+    if (mx) { mx.value = (!isNaN(v) && v > 0) ? Math.round(v) : ''; mx.className = (!isNaN(v) && v > 0) ? 'has-value' : ''; }
+    save(); recalcAllTotals();
+  });
+  spRow.appendChild(spLbl); spRow.appendChild(spInp);
+  spendCol.appendChild(spRow);
+
+  wrap.appendChild(incCol);
+  wrap.appendChild(spendCol);
+  outerTd.appendChild(wrap);
+  detailTr.appendChild(outerTd);
+  tr.parentNode.insertBefore(detailTr, tr.nextSibling);
+}
+
 function toggleMonth(mo) {
   collapsedMonths[mo] = !collapsedMonths[mo];
+  state.collapsedMonths = collapsedMonths;
+  save();
   const rows = document.querySelectorAll('tr[data-month="' + mo + '"]');
   rows.forEach(function(r) {
     r.style.display = collapsedMonths[mo] ? 'none' : '';
@@ -653,39 +970,90 @@ function renderMatrix() {
 
   let html = '<table id="matrix"><thead><tr>';
   html += '<th>дата</th>';
+  html += '<th class="col-spend" style="color:var(--danger);">траты</th>';
   sources.forEach(function(s) { html += '<th>' + s.code + '</th>'; });
-  html += '<th style="color:var(--warn)">итог</th>';
+  html += '<th class="col-income-total" style="color:var(--accent2);white-space:nowrap;">доходы</th>';
+  html += '<th class="col-morning" style="color:var(--muted2);white-space:nowrap;">утро</th>';
+  html += '<th class="col-evening" style="color:var(--muted2);white-space:nowrap;">вечер</th>';
+  html += '<th class="mo-sum col-row-total" style="color:var(--warn);white-space:nowrap;">дельта</th>';
   html += '</tr></thead><tbody>';
 
   // pre-calc month buckets
   const monthTotals = {};
   days.forEach(function(ds) {
     const mo = new Date(ds).getMonth();
-    if (!monthTotals[mo]) { monthTotals[mo] = { row: 0 }; sources.forEach(function(s){ monthTotals[mo][s.id] = 0; }); }
+    if (!monthTotals[mo]) { monthTotals[mo] = { row: 0, spend: 0 }; sources.forEach(function(s){ monthTotals[mo][s.id] = 0; }); }
     sources.forEach(function(s) {
       const v = parseFloat(getCell(ds, s.id).value);
-      if (!isNaN(v) && v > 0) { monthTotals[mo][s.id] += v; monthTotals[mo].row += v; }
+      if (!isNaN(v) && v > 0) { monthTotals[mo][s.id] += v; if (!s.noBalance) monthTotals[mo].row += v; }
     });
+    const sp = parseFloat(state.spends[ds]) || 0;
+    monthTotals[mo].spend += sp;
+  });
+
+  // pre-calc running balance for month boundaries
+  const fc = state.fc || {};
+  let runBalPre = parseFloat(fc.balVal) || 0;
+  const monthBals = {}; // mo -> { start, end }
+  let curMo = -1;
+  days.forEach(function(ds) {
+    const mo = new Date(ds).getMonth();
+    if (mo !== curMo) { monthBals[mo] = { start: runBalPre }; curMo = mo; }
+    const spend = parseFloat(state.spends[ds]) || 0;
+    let inc = 0;
+    sources.forEach(function(s) { if (s.noBalance) return; const v = parseFloat(getCell(ds, s.id).value); if (!isNaN(v)) inc += v; });
+    runBalPre = runBalPre - spend + inc;
+    monthBals[mo].end = runBalPre;
   });
 
   function monthTotalRow(mo, placement) {
-    const mt = monthTotals[mo] || { row: 0 };
+    const mt = monthTotals[mo] || { row: 0, spend: 0 };
+    const mb = monthBals[mo] || { start: 0, end: 0 };
     const collapsed = collapsedMonths[mo];
     const arrow = placement === 'before' ? (collapsed ? '▶' : '▼') : '';
+    const delta = mt.row - mt.spend;
+
+    const S = 'font-family:var(--mono);font-size:11px;font-weight:600;text-align:right;padding:0 10px;white-space:nowrap;';
+
     let r = '<tr class="month-total-row" data-mo="' + mo + '" onclick="toggleMonth(' + mo + ')" style="cursor:pointer;">';
-    r += '<td style="padding:4px 8px;color:var(--accent2);font-size:10px;font-weight:600;letter-spacing:0.05em;user-select:none;">' +
-      '<span class="mo-arrow" style="margin-right:4px;font-size:9px;">' + (placement === 'before' ? (collapsed ? '▶' : '▼') : '') + '</span>' +
-      MONTHS_RU[mo].slice(0,3).toUpperCase() + '</td>';
+    // date
+    r += '<td style="padding:4px 8px;color:var(--accent2);font-size:11px;font-weight:600;letter-spacing:0.05em;user-select:none;white-space:nowrap;">' +
+      '<span class="mo-arrow" style="margin-right:5px;font-size:9px;opacity:0.6;">' + arrow + '</span>' +
+      MONTHS_RU[mo].slice(0, 3).toUpperCase() + '</td>';
+    // траты (col-spend position — перед источниками, видна в свёрнутом режиме)
+    r += '<td class="col-spend" style="padding:0 10px;text-align:right;font-family:var(--mono);font-size:11px;font-weight:600;white-space:nowrap;color:' + (mt.spend > 0 ? 'rgba(248,113,113,0.9)' : 'var(--muted)') + ';">' + (mt.spend > 0 ? fmtNum(mt.spend) : '—') + '</td>';
+    // source cols (скрыты в свёрнутом режиме через CSS)
     sources.forEach(function(s) {
       const v = mt[s.id] || 0;
-      r += '<td style="padding:0 6px;text-align:right;font-family:var(--mono);font-size:10px;color:' + (v > 0 ? 'var(--accent2)' : 'var(--muted)') + ';font-weight:600;">' + (v > 0 ? fmtNum(v) : '') + '</td>';
+      r += '<td style="' + S + 'color:' + (v > 0 ? 'var(--accent2)' : 'var(--muted)') + ';opacity:0.7;">' + (v > 0 ? fmtNum(v) : '') + '</td>';
     });
-    r += '<td style="padding:0 8px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--warn);font-weight:700;">' + (mt.row > 0 ? fmtNum(mt.row) : '') + '</td>';
+    // доходы (col-income-total position — видна в свёрнутом режиме)
+    r += '<td class="col-income-total" style="' + S + 'color:' + (mt.row > 0 ? 'var(--accent2)' : 'var(--muted)') + ';">' + (mt.row > 0 ? fmtNum(mt.row) : '—') + '</td>';
+    // утро (col-morning position — баланс начала месяца)
+    r += '<td class="col-morning" style="' + S + 'color:' + (mb.start < 0 ? 'var(--danger)' : 'var(--muted2)') + ';">' + (mb.start !== 0 ? fmtNum(mb.start) : '—') + '</td>';
+    // вечер (col-evening position — баланс конца месяца)
+    r += '<td class="col-evening" style="' + S + 'color:' + (mb.end < 0 ? 'var(--danger)' : mb.end >= mb.start ? 'var(--accent)' : 'var(--muted2)') + ';">' + (mb.end !== 0 ? fmtNum(mb.end) : '—') + '</td>';
+    // дельта (col-row-total, sticky right)
+    const deltaColor = delta > 0 ? 'var(--accent)' : delta < 0 ? 'var(--danger)' : 'var(--warn)';
+    r += '<td class="col-row-total" style="' + S + 'color:' + deltaColor + ';">' + (delta !== 0 ? (delta > 0 ? '+' : '') + fmtNum(delta) : '—') + '</td>';
     r += '</tr>';
     return r;
   }
 
-  let prevMonth = -1;
+  // pre-calc running balance for day rows
+  let runBal = parseFloat(fc.balVal) || 0;
+  const balances = {}; // ds -> { morning, evening }
+  days.forEach(function(ds) {
+    const morning = runBal;
+    const spend = parseFloat(state.spends[ds]) || 0;
+    let inc = 0;
+    sources.forEach(function(s) { if (s.noBalance) return; const v = parseFloat(getCell(ds, s.id).value); if (!isNaN(v)) inc += v; });
+    const evening = morning - spend + inc;
+    balances[ds] = { morning: morning, evening: evening };
+    runBal = evening;
+  });
+
+  let prevMonth2 = -1;
   days.forEach(function(ds) {
     const d = new Date(ds);
     const mo = d.getMonth();
@@ -694,48 +1062,84 @@ function renderMatrix() {
     const isPast = ds < td0;
     const isToday = ds === td0;
 
-    // month total row at START of new month
-    if (mo !== prevMonth) {
-      html += monthTotalRow(mo, 'before');
-    }
-    prevMonth = mo;
+    if (mo !== prevMonth2) { html += monthTotalRow(mo, 'before'); }
+    prevMonth2 = mo;
 
     const collapsed = collapsedMonths[mo];
     let cls = isPast ? 'past' : isToday ? 'today' : 'future';
     if (isWeekend) cls += ' weekend';
 
     html += '<tr class="' + cls + '" data-month="' + mo + '" data-date-row="' + ds + '"' + (collapsed ? ' style="display:none"' : '') + '>';
-    html += '<td>' + fmtDate(ds) + '</td>';
+    html += '<td onclick="toggleDayDetail(event,this)">' + fmtDate(ds) + '</td>';
+
+    // spend col
+    const spendV = parseFloat(state.spends[ds]) || 0;
+    const spendCls = spendV !== 0 ? 'has-value' : '';
+    html += '<td class="col-spend"><input type="number" data-spend-date="' + ds + '" value="' + (spendV !== 0 ? Math.round(spendV) : '') + '" class="' + spendCls + '" placeholder="" inputmode="numeric"></td>';
+
     let rowTotal = 0;
     sources.forEach(function(s) {
       const cell = getCell(ds, s.id);
       const v = cell.value;
       const n = parseFloat(v);
       const hasVal = !isNaN(n) && n !== 0;
-      if (hasVal) rowTotal += n;
+      if (hasVal && !s.noBalance) rowTotal += n;
       const inputCls = hasVal ? 'has-value' : (!v ? 'zero' : '');
       html += '<td class="m-cell"><input type="number" data-date="' + ds + '" data-src="' + s.id + '"' +
         ' value="' + (hasVal ? Math.round(n) : '') + '"' +
         ' class="' + inputCls + '"' +
         ' placeholder="" inputmode="numeric"></td>';
     });
+
+    // income total col
+    const incColor = rowTotal > 0 ? 'var(--accent2)' : 'var(--muted)';
+    html += '<td class="col-income-total" style="color:' + incColor + ';">' + (rowTotal > 0 ? fmtNum(rowTotal) : '') + '</td>';
+
+    // morning/evening balance
+    const bals = balances[ds];
+    const mornColor = bals.morning < 0 ? 'var(--danger)' : 'var(--muted2)';
+    const evenColor = bals.evening < 0 ? 'var(--danger)' : bals.evening > bals.morning ? 'var(--accent)' : 'var(--muted2)';
+    html += '<td class="col-morning" style="color:' + mornColor + ';">' + (bals.morning !== 0 ? fmtNum(bals.morning) : '') + '</td>';
+    html += '<td class="col-evening" style="color:' + evenColor + ';">' + (bals.evening !== 0 ? fmtNum(bals.evening) : '') + '</td>';
+
     const totalCls = rowTotal > 0 ? 'm-total' : 'zero';
-    html += '<td style="padding:0 8px;text-align:right;" class="' + totalCls + '">' + (rowTotal > 0 ? fmtNum(rowTotal) : '') + '</td>';
+    html += '<td class="col-row-total ' + totalCls + '" style="padding:0 8px;text-align:right;">' + (rowTotal > 0 ? fmtNum(rowTotal) : '') + '</td>';
     html += '</tr>';
   });
 
   // year totals
-  html += '<tr class="col-total"><td style="color:var(--accent2);font-size:10px;letter-spacing:0.05em;">ГОД</td>';
   let grandTotal = 0;
+  let yearSpend = 0;
+  const srcTotals = {};
+  sources.forEach(function(s) { srcTotals[s.id] = 0; });
+  days.forEach(function(ds) {
+    sources.forEach(function(s) { const v = parseFloat(getCell(ds, s.id).value); if (!isNaN(v) && v > 0) { srcTotals[s.id] += v; grandTotal += v; } });
+    yearSpend += parseFloat(state.spends[ds]) || 0;
+  });
+  const yearStart = monthBals[0] ? monthBals[0].start : 0;
+  const yearEnd = monthBals[11] ? monthBals[11].end : 0;
+  const yearDelta = grandTotal - yearSpend;
+  const YS = 'font-family:var(--mono);font-size:11px;font-weight:700;text-align:right;padding:0 10px;white-space:nowrap;';
+
+  html += '<tr class="col-total"><td style="color:var(--accent2);font-size:10px;letter-spacing:0.05em;padding:4px 8px;">ГОД</td>';
+  // траты (col-spend position)
+  html += '<td class="col-spend" style="' + YS + 'color:' + (yearSpend > 0 ? 'rgba(248,113,113,0.9)' : 'var(--muted)') + ';">' + (yearSpend > 0 ? fmtNum(yearSpend) : '—') + '</td>';
+  // per-source totals
   sources.forEach(function(s) {
-    let total = 0;
-    days.forEach(function(ds) { const v = parseFloat(getCell(ds, s.id).value); if (!isNaN(v)) total += v; });
-    grandTotal += total;
+    const total = srcTotals[s.id] || 0;
     html += '<td class="m-cell" style="padding:0 6px;text-align:right;">' +
       '<span style="color:var(--warn);font-family:var(--mono);font-size:11px;font-weight:600;">' +
       (total > 0 ? fmtNum(total) : '—') + '</span></td>';
   });
-  html += '<td style="padding:0 8px;text-align:right;color:var(--accent);font-family:var(--mono);font-size:12px;font-weight:700;">' + fmtNum(grandTotal) + '</td>';
+  // доходы (col-income-total position)
+  html += '<td class="col-income-total" style="' + YS + 'color:' + (grandTotal > 0 ? 'var(--accent2)' : 'var(--muted)') + ';">' + (grandTotal > 0 ? fmtNum(grandTotal) : '—') + '</td>';
+  // утро 1 янв (col-morning position)
+  html += '<td class="col-morning" style="' + YS + 'color:' + (yearStart < 0 ? 'var(--danger)' : 'var(--muted2)') + ';">' + (yearStart !== 0 ? fmtNum(yearStart) : '—') + '</td>';
+  // вечер 31 дек (col-evening position)
+  html += '<td class="col-evening" style="' + YS + 'color:' + (yearEnd < 0 ? 'var(--danger)' : yearEnd >= yearStart ? 'var(--accent)' : 'var(--muted2)') + ';">' + (yearEnd !== 0 ? fmtNum(yearEnd) : '—') + '</td>';
+  // дельта (col-row-total, sticky)
+  const yearDeltaColor = yearDelta > 0 ? 'var(--accent)' : yearDelta < 0 ? 'var(--danger)' : 'var(--warn)';
+  html += '<td class="col-row-total" style="' + YS + 'font-size:12px;color:' + yearDeltaColor + ';">' + (yearDelta !== 0 ? (yearDelta > 0 ? '+' : '') + fmtNum(yearDelta) : '—') + '</td>';
   html += '</tr></tbody></table>';
   wrap.innerHTML = html;
 
@@ -776,10 +1180,12 @@ function renderMatrix() {
         const cells = hdr.querySelectorAll('td');
         sources.forEach(function(s, i) {
           const v = moTotals[s.id] || 0;
-          cells[i + 1].textContent = v !== 0 ? fmtNum(v) : '';
-          cells[i + 1].style.color = v !== 0 ? 'var(--accent2)' : 'var(--muted)';
+          cells[i + 2].textContent = v !== 0 ? fmtNum(v) : '';
+          cells[i + 2].style.color = v !== 0 ? 'var(--accent2)' : 'var(--muted)';
         });
-        cells[cells.length - 1].textContent = moTotals.row !== 0 ? fmtNum(moTotals.row) : '';
+        // обновить доходы в col-income-total (N+2 от начала)
+        cells[sources.length + 2].textContent = moTotals.row !== 0 ? fmtNum(moTotals.row) : '';
+        cells[sources.length + 2].style.color = moTotals.row > 0 ? 'var(--accent2)' : 'var(--muted)';
       }
     });
     inp.addEventListener('focus', function() {
@@ -788,7 +1194,22 @@ function renderMatrix() {
     });
   });
 
-  // error tooltips on past cells — mouse hover + tap
+  // spend column events
+  wrap.querySelectorAll('input[data-spend-date]').forEach(function(inp) {
+    inp.addEventListener('change', function() {
+      const ds = this.dataset.spendDate;
+      const v = parseFloat(this.value);
+      if (!isNaN(v) && v !== 0) {
+        state.spends[ds] = v;
+        this.className = 'has-value';
+      } else {
+        delete state.spends[ds];
+        this.className = '';
+      }
+      save();
+    });
+    inp.addEventListener('focus', function() { this.select(); });
+  });
   wrap.querySelectorAll('tr.past .m-cell input').forEach(function(inp) {
     const cell = state.cells[inp.dataset.date + '|' + inp.dataset.src];
     if (!cell || !cell.history || cell.history.length === 0) return;
@@ -819,6 +1240,8 @@ function renderMatrix() {
   renderMarkers(days);
   // show timeline
   renderTimeline(days);
+  // update month summary rows after DOM is built
+  setTimeout(recalcAllTotals, 0);
 }
 
 // ── Edit markers ────────────────────────────────────────────────────────
@@ -852,7 +1275,12 @@ function renderMarkers(days) {
 
 // ── Timeline slider ─────────────────────────────────────────────────────
 let tlDragging = false;
-let viewDate = null; // null = live view
+let viewDate = null;
+let tlMoveThrottle = null;
+function tlMoveThrottled(clientY) {
+  if (tlMoveThrottle) return;
+  tlMoveThrottle = requestAnimationFrame(function() { tlMove(clientY); tlMoveThrottle = null; });
+}
 
 function renderTimeline(days) {
   const tl = document.getElementById('timeline');
@@ -912,7 +1340,7 @@ function tlMouseDown(e) {
   document.addEventListener('mousemove', tlMouseMove);
   document.addEventListener('mouseup', tlMouseUp);
 }
-function tlMouseMove(e) { if (tlDragging) tlMove(e.clientY); }
+function tlMouseMove(e) { if (tlDragging) tlMoveThrottled(e.clientY); }
 function tlMouseUp() {
   tlDragging = false;
   document.removeEventListener('mousemove', tlMouseMove);
@@ -923,7 +1351,7 @@ function tlTouchStart(e) {
   document.addEventListener('touchmove', tlTouchMove, { passive: true });
   document.addEventListener('touchend', tlTouchEnd);
 }
-function tlTouchMove(e) { tlMove(e.touches[0].clientY); }
+function tlTouchMove(e) { tlMoveThrottled(e.touches[0].clientY); }
 function tlTouchEnd() {
   document.removeEventListener('touchmove', tlTouchMove);
   document.removeEventListener('touchend', tlTouchEnd);
@@ -964,33 +1392,27 @@ function setViewDate(isoStr, preview) {
   viewDate = isoStr;
   const ts = new Date(isoStr).getTime();
 
-  // update all inputs to show values as of that timestamp
-  document.querySelectorAll('input[data-date][data-src]').forEach(function(inp) {
+  // only update visible inputs for performance
+  document.querySelectorAll('tr:not([style*="display:none"]) input[data-date][data-src]').forEach(function(inp) {
     const key = inp.dataset.date + '|' + inp.dataset.src;
     const cell = state.cells[key];
     if (!cell) { inp.value = ''; inp.className = 'zero'; return; }
 
-    // find value at that timestamp: walk history in order
     let val = '';
     const hist = cell.history || [];
     for (var i = 0; i < hist.length; i++) {
       if (new Date(hist[i].ts).getTime() <= ts) val = hist[i].value;
     }
-    // if all history is after ts, val stays ''
-    // if current value was set before ts, use it
     if (new Date(cell.history && cell.history.length ? cell.history[cell.history.length-1].ts : 0).getTime() <= ts) {
       val = cell.value;
     }
-
     const n = parseFloat(val);
     inp.value = (!isNaN(n) && n !== 0) ? Math.round(n) : '';
     inp.className = (!isNaN(n) && n !== 0) ? 'has-value' : 'zero';
   });
 
   document.getElementById('matrix').classList.add('history-mode');
-  if (!preview) {
-    document.getElementById('tl-label').style.display = 'none';
-  }
+  if (!preview) document.getElementById('tl-label').style.display = 'none';
   recalcAllTotals();
 }
 
@@ -998,43 +1420,74 @@ function recalcAllTotals() {
   const sources = state.sources;
   const days = daysInYear(state.year);
 
-  // recalc each visible month total row
-  const months = [...new Set(days.map(function(ds) { return new Date(ds).getMonth(); }))];
-  months.forEach(function(mo) {
-    const daysInMo = days.filter(function(ds) { return new Date(ds).getMonth() === mo; });
-    const moTotals = {};
-    sources.forEach(function(s) { moTotals[s.id] = 0; });
-    moTotals.row = 0;
-    daysInMo.forEach(function(ds) {
-      sources.forEach(function(s) {
-        const inp = document.querySelector('input[data-date="' + ds + '"][data-src="' + s.id + '"]');
-        const v = parseFloat(inp ? inp.value : '');
-        if (!isNaN(v) && v !== 0) { moTotals[s.id] += v; moTotals.row += v; }
-      });
+  // compute from state directly (not DOM) for accuracy
+  let runBal = parseFloat((state.fc || {}).balVal) || 0;
+  const monthSummary = {};
+  let curMo = -1;
+
+  days.forEach(function(ds) {
+    const mo = new Date(ds).getMonth();
+    if (mo !== curMo) {
+      monthSummary[mo] = { spend: 0, income: 0, startBal: runBal, endBal: 0 };
+      curMo = mo;
+    }
+    const spend = parseFloat(state.spends[ds]) || 0;
+    let inc = 0;
+    sources.forEach(function(s) {
+      if (s.noBalance) return;
+      const v = parseFloat(getCell(ds, s.id).value);
+      if (!isNaN(v)) inc += v;
     });
-    const hdr = document.querySelector('tr.month-total-row[data-mo="' + mo + '"]');
-    if (!hdr) return;
-    const cells = hdr.querySelectorAll('td');
-    sources.forEach(function(s, i) {
-      const v = moTotals[s.id] || 0;
-      cells[i + 1].textContent = v !== 0 ? fmtNum(v) : '';
-      cells[i + 1].style.color = v !== 0 ? 'var(--accent2)' : 'var(--muted)';
-    });
-    cells[cells.length - 1].textContent = moTotals.row !== 0 ? fmtNum(moTotals.row) : '';
+    monthSummary[mo].spend += spend;
+    monthSummary[mo].income += inc;
+    runBal = runBal - spend + inc;
+    monthSummary[mo].endBal = runBal;
   });
 
-  // recalc row totals
+  Object.keys(monthSummary).forEach(function(mo) {
+    const ms = monthSummary[mo];
+    const hdr = document.querySelector('tr.month-total-row[data-mo="' + mo + '"]');
+    if (!hdr) return;
+
+    const spCell = hdr.querySelector('.mo-spend');
+    if (spCell) { spCell.textContent = ms.spend > 0 ? fmtNum(ms.spend) : '—'; spCell.style.color = ms.spend > 0 ? 'rgba(248,113,113,0.9)' : 'var(--muted)'; }
+    const incCell = hdr.querySelector('.mo-income');
+    if (incCell) { incCell.textContent = ms.income > 0 ? fmtNum(ms.income) : '—'; incCell.style.color = ms.income > 0 ? 'var(--accent2)' : 'var(--muted)'; }
+    const mornCell = hdr.querySelector('.mo-morning');
+    if (mornCell) { mornCell.textContent = ms.startBal !== 0 ? fmtNum(ms.startBal) : '—'; mornCell.style.color = ms.startBal < 0 ? 'var(--danger)' : 'var(--muted2)'; }
+    const evenCell = hdr.querySelector('.mo-evening');
+    if (evenCell) { evenCell.textContent = ms.endBal !== 0 ? fmtNum(ms.endBal) : '—'; evenCell.style.color = ms.endBal < 0 ? 'var(--danger)' : ms.endBal > ms.startBal ? 'var(--accent)' : 'var(--muted2)'; }
+    const delta = ms.income - ms.spend;
+    const deltaCell = hdr.querySelector('.mo-delta');
+    if (deltaCell) { deltaCell.textContent = delta !== 0 ? (delta > 0 ? '+' : '') + fmtNum(delta) : '—'; deltaCell.style.color = delta > 0 ? 'var(--accent)' : delta < 0 ? 'var(--danger)' : 'var(--warn)'; }
+
+    // per-source cells (no class, between col-spend and col-income-total)
+    const allTds = hdr.querySelectorAll('td');
+    // td[0]=name, td[1]=spend, td[2..n+1]=sources, td[n+2]=income, td[n+3]=morning, td[n+4]=evening, td[n+5]=total
+    sources.forEach(function(s, i) {
+      const daysInMo = days.filter(function(ds) { return new Date(ds).getMonth() === parseInt(mo); });
+      let v = 0;
+      daysInMo.forEach(function(ds) { const n = parseFloat(getCell(ds, s.id).value); if (!isNaN(n)) v += n; });
+      const cell = allTds[i + 2];
+      if (cell) {
+        cell.textContent = v !== 0 ? fmtNum(v) : '';
+        cell.style.color = v !== 0 ? 'var(--accent2)' : 'var(--muted)';
+      }
+    });
+  });
+
+  // recalc visible day row totals
   days.forEach(function(ds) {
     const row = document.querySelector('tr[data-date-row="' + ds + '"]');
-    if (!row) return;
+    if (!row || row.style.display === 'none') return;
     let total = 0;
+    const noBalIds = new Set(state.sources.filter(function(s) { return s.noBalance; }).map(function(s) { return s.id; }));
     row.querySelectorAll('input[data-date]').forEach(function(inp) {
-      const v = parseFloat(inp.value);
-      if (!isNaN(v)) total += v;
+      if (noBalIds.has(inp.dataset.src)) return;
+      const v = parseFloat(inp.value); if (!isNaN(v)) total += v;
     });
-    const last = row.lastElementChild;
-    last.textContent = total !== 0 ? fmtNum(total) : '';
-    last.className = total !== 0 ? 'm-total' : 'zero';
+    const last = row.querySelector('.col-row-total');
+    if (last) { last.textContent = total !== 0 ? fmtNum(total) : ''; last.className = 'col-row-total ' + (total !== 0 ? 'm-total' : 'zero'); }
   });
 }
 
@@ -1212,10 +1665,45 @@ document.addEventListener('click', function(e) {
 });
 
 // ── Day mode ───────────────────────────────────────────────────────────
+
+// Разворачивает крупные траты из прогноза по дням с сохранением лейблов
+function buildDayExpensesMap(days) {
+  const map = {};
+  const expenses = (state.fc && state.fc.expenses) || [];
+  const startDs = days[0], endDs = days[days.length - 1];
+  expenses.forEach(function(r, expIdx) {
+    const s = parseFloat(r.sum); if (isNaN(s) || s === 0) return;
+    const label = r.label || '';
+    if (r.freq === 'once') {
+      if (r.date >= startDs && r.date <= endDs) {
+        if (!map[r.date]) map[r.date] = [];
+        map[r.date].push({ label: label, sum: s, expIdx: expIdx });
+      }
+      return;
+    }
+    const dt = parseLocalDate(r.date);
+    while (true) {
+      const ds = localDateStr(dt);
+      if (ds > endDs) break;
+      if (ds >= startDs) {
+        if (!map[ds]) map[ds] = [];
+        map[ds].push({ label: label, sum: s, expIdx: expIdx });
+      }
+      if (r.freq === 'monthly') dt.setMonth(dt.getMonth() + 1);
+      else if (r.freq === 'yearly') dt.setFullYear(dt.getFullYear() + 1);
+      else if (r.freq === 'weekly') dt.setDate(dt.getDate() + 7);
+      else dt.setDate(dt.getDate() + 1);
+    }
+  });
+  return map;
+}
+
 function renderDay() {
   const wrap = document.getElementById('day-wrap');
   const days = daysInYear(state.year);
   const td0 = today();
+  const limit = parseFloat(state.fc && state.fc.limit) || 0;
+  const dayExpMap = buildDayExpensesMap(days);
   let html = '';
 
   days.forEach(function(ds) {
@@ -1232,14 +1720,46 @@ function renderDay() {
       if (!isNaN(v)) total += v;
     });
 
+    const spendV = parseFloat(state.spends[ds]) || 0;
+    const dayExps = dayExpMap[ds] || [];
+    // показываем лимит в строке если: есть трат ИЛИ день не прошёл
+    const showLimit = limit > 0 && (spendV > 0 || !isPast);
+
     html += '<div class="day-card ' + cls + expanded + '" data-date="' + ds + '">';
     html += '<div class="day-header" onclick="toggleDay(this.parentElement)">';
     html += '<span class="day-date">' + fmtDate(ds) + '</span>';
+    if (spendV > 0) html += '<span class="day-spend-hdr">−' + fmtNum(spendV) + '</span>';
     html += '<span class="day-total ' + (total === 0 ? 'zero' : '') + '">' + (total > 0 ? fmtNum(total) : '—') + '</span>';
     html += '<span class="day-chevron">▶</span>';
     html += '</div>';
 
     html += '<div class="day-entries">';
+
+    // лимит (первым)
+    if (showLimit) {
+      html += '<div class="entry-row">';
+      html += '<span class="entry-code" style="color:var(--warn);">ЛИМ</span>';
+      html += '<span style="flex:1;font-family:var(--mono);font-size:11px;color:var(--muted);">лимит</span>';
+      html += '<span style="font-family:var(--mono);font-size:12px;font-weight:600;color:rgba(251,191,36,0.85);">−' + fmtNum(limit) + '</span>';
+      html += '</div>';
+    }
+    // крупные траты с названиями — редактируемые
+    dayExps.forEach(function(e) {
+      html += '<div class="entry-row">';
+      html += '<span class="entry-code" style="color:var(--danger);">ТРТ</span>';
+      html += '<span style="flex:1;font-family:var(--mono);font-size:11px;color:var(--muted2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (e.label || '—') + '</span>';
+      html += '<input class="entry-input spend has-value" type="number" inputmode="numeric"' +
+        ' data-exp-idx="' + e.expIdx + '" value="' + Math.round(e.sum) + '" placeholder="—"' +
+        ' style="width:80px;text-align:right;">';
+      html += '</div>';
+    });
+    // поле трат — всегда редактируемое
+    html += '<div class="entry-row">';
+    html += '<span class="entry-code" style="color:var(--danger);">ТРАТ</span>';
+    html += '<input class="entry-input spend' + (spendV > 0 ? ' has-value' : '') + '" type="number" inputmode="numeric"' +
+      ' data-spend-date="' + ds + '" value="' + (spendV > 0 ? Math.round(spendV) : '') + '" placeholder="—">';
+    html += '</div>';
+
     state.sources.forEach(function(s) {
       const active = isSourceActive(s, ds);
       const cell = getCell(ds, s.id);
@@ -1303,6 +1823,50 @@ function renderDay() {
   wrap.querySelectorAll('.entry-hist-btn').forEach(function(btn) {
     btn.addEventListener('click', function() { showHist(this.dataset.date, this.dataset.src); });
   });
+
+  function syncDaySpend(card) {
+    const ds = card.dataset.date;
+    const manInp = card.querySelector('.entry-input[data-spend-date]');
+    const manV = manInp ? (parseFloat(manInp.value) || 0) : 0;
+    if (manV > 0) state.spends[ds] = manV; else delete state.spends[ds];
+    const hdr = card.querySelector('.day-header');
+    let spHdr = hdr.querySelector('.day-spend-hdr');
+    if (manV > 0) {
+      if (!spHdr) { spHdr = document.createElement('span'); spHdr.className = 'day-spend-hdr'; hdr.insertBefore(spHdr, hdr.querySelector('.day-total')); }
+      spHdr.textContent = '−' + fmtNum(manV);
+    } else if (spHdr) { spHdr.remove(); }
+    recalcAllTotals();
+  }
+
+  wrap.querySelectorAll('.entry-input[data-exp-idx]').forEach(function(inp) {
+    function applyTrt() {
+      const idx = parseInt(this.dataset.expIdx);
+      const v = parseFloat(this.value);
+      if (!isNaN(v) && v > 0) {
+        state.fc.expenses[idx].sum = String(Math.round(v));
+        this.className = 'entry-input spend has-value';
+      } else {
+        state.fc.expenses[idx].sum = '';
+        this.className = 'entry-input spend';
+      }
+      save();
+      recalcAllTotals();
+    }
+    inp.addEventListener('change', applyTrt);
+    inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { this.blur(); } });
+    inp.addEventListener('focus', function() { this.select(); });
+  });
+
+  wrap.querySelectorAll('.entry-input.spend:not([data-exp-idx])').forEach(function(inp) {
+    inp.addEventListener('change', function() {
+      const v = parseFloat(this.value);
+      this.className = 'entry-input spend' + ((!isNaN(v) && v > 0) ? ' has-value' : '');
+      save();
+      syncDaySpend(this.closest('.day-card'));
+    });
+    inp.addEventListener('keydown', function(e) { if (e.key === 'Enter') { this.blur(); } });
+    inp.addEventListener('focus', function() { this.select(); });
+  });
 }
 
 function isSourceActive(s, date) {
@@ -1313,6 +1877,283 @@ function isSourceActive(s, date) {
 
 function toggleDay(card) {
   card.classList.toggle('expanded');
+}
+
+// ── Forecast panel ─────────────────────────────────────────────────────
+function openForecast() {
+  const fc = state.fc;
+  document.getElementById('fc-bal-date').value = fc.balDate || today();
+  document.getElementById('fc-bal-val').value = fc.balVal || '';
+  document.getElementById('fc-limit').value = fc.limit || '';
+  renderFcExpenses();
+  document.getElementById('forecast-panel').classList.add('open');
+}
+
+function closeForecast() {
+  state.fc.balDate = document.getElementById('fc-bal-date').value;
+  state.fc.balVal = document.getElementById('fc-bal-val').value;
+  state.fc.limit = document.getElementById('fc-limit').value;
+  state.fc.expenses = getFcExpenses();
+  save();
+  document.getElementById('forecast-panel').classList.remove('open');
+}
+
+function renderFcExpenses() {
+  const container = document.getElementById('fc-expenses');
+  container.innerHTML = '';
+  (state.fc.expenses || []).forEach(function(e, i) { container.appendChild(fcExpenseEl(e, i)); });
+}
+
+function fcExpenseEl(e, idx) {
+  const div = document.createElement('div');
+  div.style.cssText = 'padding:8px 0;border-bottom:1px solid var(--border);';
+  const row1 = document.createElement('div');
+  row1.className = 'fc-entry';
+
+  const dateInp = document.createElement('input');
+  dateInp.type = 'date'; dateInp.className = 'fc-input';
+  dateInp.style.cssText = 'max-width:120px;flex:none;'; dateInp.value = e.date || today();
+
+  const sumInp = document.createElement('input');
+  sumInp.type = 'number'; sumInp.className = 'fc-input';
+  sumInp.style.cssText = 'max-width:90px;flex:none;color:var(--danger);';
+  sumInp.value = e.sum || ''; sumInp.placeholder = 'сумма'; sumInp.inputMode = 'numeric';
+
+  const labelInp = document.createElement('input');
+  labelInp.type = 'text'; labelInp.className = 'fc-entry-label';
+  labelInp.value = e.label || ''; labelInp.placeholder = 'название';
+
+  const del = document.createElement('button');
+  del.className = 'fc-del'; del.textContent = '×';
+  del.onclick = function() { state.fc.expenses.splice(idx, 1); renderFcExpenses(); };
+
+  row1.appendChild(dateInp); row1.appendChild(sumInp); row1.appendChild(labelInp); row1.appendChild(del);
+
+  const freqLabels = ['раз','день','нед','мес','год'];
+  const freqVals = ['once','daily','weekly','monthly','yearly'];
+  const freqRow = document.createElement('div');
+  freqRow.className = 'fc-freq';
+  freqLabels.forEach(function(f, fi) {
+    const btn = document.createElement('button');
+    btn.className = 'fc-freq-btn' + ((e.freq || 'once') === freqVals[fi] ? ' active' : '');
+    btn.textContent = f;
+    btn.onclick = function() {
+      freqRow.querySelectorAll('.fc-freq-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+    };
+    freqRow.appendChild(btn);
+  });
+
+  div.appendChild(row1); div.appendChild(freqRow);
+  return div;
+}
+
+function fcAddExpense() {
+  if (!state.fc.expenses) state.fc.expenses = [];
+  // save current values from DOM first
+  state.fc.expenses = getFcExpenses();
+  state.fc.expenses.push({ date: today(), sum: '', label: '', freq: 'once' });
+  renderFcExpenses();
+}
+
+function getFcExpenses() {
+  const rows = document.getElementById('fc-expenses').querySelectorAll('div[style]');
+  const freqVals = ['once','daily','weekly','monthly','yearly'];
+  const result = [];
+  rows.forEach(function(row) {
+    const dateInp = row.querySelector('input[type=date]');
+    const sumInp = row.querySelector('input[type=number]');
+    const labelInp = row.querySelector('input[type=text]');
+    const freqBtns = row.querySelectorAll('.fc-freq-btn');
+    let freq = 'once';
+    freqBtns.forEach(function(btn, i) { if (btn.classList.contains('active')) freq = freqVals[i]; });
+    if (dateInp && sumInp && parseFloat(sumInp.value)) {
+      result.push({ date: dateInp.value, sum: sumInp.value, label: labelInp ? labelInp.value : '', freq: freq });
+    }
+  });
+  return result;
+}
+
+function fcExpand(rows, startDate, endDate) {
+  const result = [];
+  rows.forEach(function(r) {
+    const s = parseFloat(r.sum); if (isNaN(s) || s === 0) return;
+    const extra = r.srcId ? { srcId: r.srcId } : {};
+    if (r.freq === 'once') {
+      if (r.date >= startDate && r.date <= endDate) result.push(Object.assign({ date: r.date, sum: s }, extra));
+      return;
+    }
+    const dt = new Date(r.date);
+    while (true) {
+      const ds = dt.toISOString().split('T')[0];
+      if (ds > endDate) break;
+      if (ds >= startDate) result.push(Object.assign({ date: ds, sum: s }, extra));
+      if (r.freq === 'monthly') dt.setMonth(dt.getMonth() + 1);
+      else if (r.freq === 'yearly') dt.setFullYear(dt.getFullYear() + 1);
+      else if (r.freq === 'weekly') dt.setDate(dt.getDate() + 7);
+      else dt.setDate(dt.getDate() + 1);
+    }
+  });
+  return result;
+}
+
+function fcCalc() {
+  state.fc.balDate = document.getElementById('fc-bal-date').value;
+  state.fc.balVal = document.getElementById('fc-bal-val').value;
+  state.fc.limit = document.getElementById('fc-limit').value;
+  state.fc.expenses = getFcExpenses();
+  save();
+
+  const startDate = today();
+  const allDays = daysInYear(state.year);
+  const futureDays = allDays.filter(function(ds) { return ds >= startDate; });
+  if (!futureDays.length) { closeForecast(); return; }
+
+  const limit = parseFloat(state.fc.limit) || 0;
+  const lastDay = futureDays[futureDays.length - 1];
+  const expanded = fcExpand(state.fc.expenses, startDate, lastDay);
+
+  // build daily spend map only for future
+  const spendMap = {};
+  if (limit > 0) futureDays.forEach(function(ds) { spendMap[ds] = limit; });
+  expanded.forEach(function(e) { spendMap[e.date] = (spendMap[e.date] || 0) + e.sum; });
+
+  // write only future spends
+  futureDays.forEach(function(ds) {
+    if (spendMap[ds]) state.spends[ds] = spendMap[ds];
+  });
+  save();
+  closeForecast();
+  renderMatrix();
+}
+
+// ── Income forecast ────────────────────────────────────────────────────
+function openIncForecast() {
+  renderFcIncomes();
+  document.getElementById('inc-forecast-panel').classList.add('open');
+}
+function closeIncForecast() {
+  state.fc.incomes = getFcIncomes();
+  save();
+  document.getElementById('inc-forecast-panel').classList.remove('open');
+}
+
+function renderFcIncomes() {
+  const container = document.getElementById('fc-incomes');
+  container.innerHTML = '';
+  (state.fc.incomes || []).forEach(function(e, i) { container.appendChild(fcIncomeEl(e, i)); });
+}
+
+function fcIncomeEl(e, idx) {
+  const div = document.createElement('div');
+  div.style.cssText = 'padding:8px 0;border-bottom:1px solid var(--border);';
+  const row1 = document.createElement('div');
+  row1.className = 'fc-entry';
+
+  const dateInp = document.createElement('input');
+  dateInp.type = 'date'; dateInp.className = 'fc-input';
+  dateInp.style.cssText = 'max-width:120px;flex:none;'; dateInp.value = e.date || today();
+
+  const sumInp = document.createElement('input');
+  sumInp.type = 'number'; sumInp.className = 'fc-input';
+  sumInp.style.cssText = 'max-width:90px;flex:none;color:var(--accent2);';
+  sumInp.value = e.sum || ''; sumInp.placeholder = 'сумма'; sumInp.inputMode = 'numeric';
+
+  const srcSel = document.createElement('select');
+  srcSel.className = 'fc-input';
+  srcSel.style.cssText = 'flex:1;min-width:60px;';
+  state.sources.forEach(function(s) {
+    const opt = document.createElement('option');
+    opt.value = s.id; opt.textContent = s.code + (s.name ? ' ' + s.name : '');
+    if (s.id === e.srcId) opt.selected = true;
+    srcSel.appendChild(opt);
+  });
+
+  const del = document.createElement('button');
+  del.className = 'fc-del'; del.textContent = '×';
+  del.onclick = function() { state.fc.incomes.splice(idx, 1); renderFcIncomes(); };
+
+  row1.appendChild(dateInp); row1.appendChild(sumInp); row1.appendChild(srcSel); row1.appendChild(del);
+
+  const freqLabels = ['раз','день','нед','мес','год'];
+  const freqVals = ['once','daily','weekly','monthly','yearly'];
+  const freqRow = document.createElement('div');
+  freqRow.className = 'fc-freq';
+  freqLabels.forEach(function(f, fi) {
+    const btn = document.createElement('button');
+    btn.className = 'fc-freq-btn' + ((e.freq || 'monthly') === freqVals[fi] ? ' active' : '');
+    btn.textContent = f;
+    btn.onclick = function() {
+      freqRow.querySelectorAll('.fc-freq-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+    };
+    freqRow.appendChild(btn);
+  });
+
+  div.appendChild(row1); div.appendChild(freqRow);
+  return div;
+}
+
+function fcAddIncome() {
+  if (!state.fc.incomes) state.fc.incomes = [];
+  state.fc.incomes = getFcIncomes();
+  const firstSrc = state.sources[0];
+  state.fc.incomes.push({ date: today(), sum: '', srcId: firstSrc ? firstSrc.id : '', freq: 'monthly' });
+  renderFcIncomes();
+}
+
+function getFcIncomes() {
+  const rows = document.getElementById('fc-incomes').querySelectorAll('div[style]');
+  const freqVals = ['once','daily','weekly','monthly','yearly'];
+  const result = [];
+  rows.forEach(function(row) {
+    const dateInp = row.querySelector('input[type=date]');
+    const sumInp = row.querySelector('input[type=number]');
+    const srcSel = row.querySelector('select');
+    const freqBtns = row.querySelectorAll('.fc-freq-btn');
+    let freq = 'monthly';
+    freqBtns.forEach(function(btn, i) { if (btn.classList.contains('active')) freq = freqVals[i]; });
+    if (dateInp && sumInp && srcSel && parseFloat(sumInp.value)) {
+      result.push({ date: dateInp.value, sum: sumInp.value, srcId: srcSel.value, freq: freq });
+    }
+  });
+  return result;
+}
+
+function fcIncCalc() {
+  state.fc.incomes = getFcIncomes();
+  save();
+
+  const startDate = today();
+  const allDays = daysInYear(state.year);
+  const futureDays = allDays.filter(function(ds) { return ds >= startDate; });
+  if (!futureDays.length) { closeIncForecast(); return; }
+  const lastDay = futureDays[futureDays.length - 1];
+
+  const expanded = fcExpand(state.fc.incomes.map(function(r) {
+    return { date: r.date, sum: parseFloat(r.sum) || 0, freq: r.freq, srcId: r.srcId };
+  }), startDate, lastDay);
+
+  expanded.forEach(function(e) {
+    if (!e.srcId) return;
+    const existing = getCell(e.date, e.srcId).value;
+    if (existing && parseFloat(existing) !== 0) return; // не трогать ручной ввод
+    setCell(e.date, e.srcId, String(Math.round(e.sum)));
+  });
+
+  save();
+  closeIncForecast();
+  renderMatrix();
+}
+
+function toggleSourcesCols() {
+  const matrix = document.getElementById('matrix');
+  const btn = document.getElementById('btn-collapse-src');
+  if (!matrix) return;
+  const collapsed = matrix.classList.toggle('sources-collapsed');
+  btn.classList.toggle('active', collapsed);
+  btn.textContent = collapsed ? '⊞' : '⊟';
+  recalcAllTotals();
 }
 
 // ── Settings & Pack/Unpack ─────────────────────────────────────────────
@@ -1335,6 +2176,9 @@ function encStr(s, maxBytes) {
 function packData() {
   const sources = state.sources || [];
   const cells = state.cells || {};
+  const fc = state.fc || {};
+  const fcExpenses = fc.expenses || [];
+  const freqVals = ['once','daily','weekly','monthly','yearly'];
 
   // collect non-empty cells
   const cellEntries = [];
@@ -1350,12 +2194,22 @@ function packData() {
     cellEntries.push({ ds, srcIdx, v, history: cell.history || [] });
   });
 
+  // collect non-empty spends
+  const spendEntries = Object.keys(state.spends || {}).filter(function(ds) {
+    const v = parseFloat(state.spends[ds]);
+    return !isNaN(v) && v !== 0;
+  });
+
+  // encode fc expense labels
+  const enc = new TextEncoder();
+  const expLabels = fcExpenses.map(function(e) { return enc.encode((e.label || '').slice(0, 60)); });
+
   // estimate size
-  // header: 2 (magic+ver) + 1 (src count)
-  // per source: 1 (codelen) + code bytes + 2 (start) + 2 (end) = ~12
-  // per cell: 1 (srcIdx) + 2 (day) + 4 (value) + 1 (hist count) + hist*(4+3) = ~8+
-  let size = 4 + 1 + sources.length * 14;
+  let size = 4 + 1 + sources.length * 15; // +1 flags byte per source
   cellEntries.forEach(function(c) { size += 8 + c.history.length * 7; });
+  size += 2 + spendEntries.length * 6;
+  size += 11; // fc header: balDate(2)+balVal(4)+limit(4)+expCount(1)
+  fcExpenses.forEach(function(e, i) { size += 8 + expLabels[i].length; });
   size += 4; // safety
 
   const buf = new ArrayBuffer(size + 512);
@@ -1364,21 +2218,21 @@ function packData() {
 
   dv.setUint8(pos++, 0x49); // 'I'
   dv.setUint8(pos++, 0x54); // 'T'
-  dv.setUint8(pos++, 0x02); // version 2
+  dv.setUint8(pos++, 0x04); // version 4
   dv.setInt16(pos, state.year || new Date().getFullYear(), false); pos += 2;
 
-  // sources
+  // sources (v4: +1 byte flags: bit0=noBalance)
   dv.setUint8(pos++, sources.length);
   sources.forEach(function(s) {
-    const code = new TextEncoder().encode((s.code || '').slice(0, 6));
+    const code = enc.encode((s.code || '').slice(0, 6));
     dv.setUint8(pos++, code.length);
     code.forEach(function(b) { dv.setUint8(pos++, b); });
     dv.setInt16(pos, dateToDay16(s.start), false); pos += 2;
     dv.setInt16(pos, dateToDay16(s.end), false); pos += 2;
-    // id as short hash (4 bytes)
     let h = 0;
     for (var i = 0; i < s.id.length; i++) h = (h * 31 + s.id.charCodeAt(i)) & 0xFFFFFFFF;
     dv.setInt32(pos, h, false); pos += 4;
+    dv.setUint8(pos++, s.noBalance ? 1 : 0); // flags
   });
 
   // cells
@@ -1391,7 +2245,6 @@ function packData() {
     dv.setUint8(pos++, Math.min(hist.length, 15));
     hist.slice(-15).forEach(function(h) {
       dv.setInt32(pos, Math.round(parseFloat(h.value)), false); pos += 4;
-      // timestamp: minutes since epoch (3 bytes = 16M minutes = 30 years)
       const mins = Math.round(new Date(h.ts).getTime() / 60000);
       dv.setUint8(pos++, (mins >> 16) & 0xFF);
       dv.setUint8(pos++, (mins >> 8) & 0xFF);
@@ -1399,14 +2252,35 @@ function packData() {
     });
   });
 
+  // spends
+  dv.setUint16(pos, spendEntries.length, false); pos += 2;
+  spendEntries.forEach(function(ds) {
+    dv.setInt16(pos, dateToDay16(ds), false); pos += 2;
+    dv.setInt32(pos, Math.round(parseFloat(state.spends[ds])), false); pos += 4;
+  });
+
+  // fc
+  dv.setInt16(pos, dateToDay16(fc.balDate), false); pos += 2;
+  dv.setInt32(pos, Math.round(parseFloat(fc.balVal) || 0), false); pos += 4;
+  dv.setInt32(pos, Math.round(parseFloat(fc.limit) || 0), false); pos += 4;
+  dv.setUint8(pos++, Math.min(fcExpenses.length, 255));
+  fcExpenses.forEach(function(e, i) {
+    dv.setInt16(pos, dateToDay16(e.date), false); pos += 2;
+    dv.setInt32(pos, Math.round(parseFloat(e.sum) || 0), false); pos += 4;
+    dv.setUint8(pos++, Math.max(0, freqVals.indexOf(e.freq || 'once')));
+    const lb = expLabels[i];
+    dv.setUint8(pos++, lb.length);
+    lb.forEach(function(b) { dv.setUint8(pos++, b); });
+  });
+
   const bytes = new Uint8Array(buf, 0, pos);
-  let hex = 'IT2';
+  let hex = 'IT4';
   bytes.forEach(function(b) { hex += b.toString(16).padStart(2,'0'); });
   return hex;
 }
 
 function unpackData(str) {
-  if (!str.startsWith('IT2')) throw new Error('bad format');
+  if (!str.startsWith('IT2') && !str.startsWith('IT3') && !str.startsWith('IT4')) throw new Error('bad format');
   const hexStr = str.slice(3);
   const bytes = new Uint8Array(hexStr.length / 2);
   for (var i = 0; i < bytes.length; i++) {
@@ -1419,16 +2293,20 @@ function unpackData(str) {
   const ver = dv.getUint8(pos++);
   const year = dv.getInt16(pos, false); pos += 2;
 
+  const dec = new TextDecoder();
+  const freqVals = ['once','daily','weekly','monthly','yearly'];
+
   const srcCount = dv.getUint8(pos++);
   const sources = [];
   for (var i = 0; i < srcCount; i++) {
     const clen = dv.getUint8(pos++);
     const codeBytes = bytes.slice(pos, pos + clen); pos += clen;
-    const code = new TextDecoder().decode(codeBytes);
+    const code = dec.decode(codeBytes);
     const start = day16ToDate(dv.getInt16(pos, false)); pos += 2;
     const end = day16ToDate(dv.getInt16(pos, false)); pos += 2;
     const hash = dv.getInt32(pos, false); pos += 4;
-    sources.push({ id: 'src_' + hash, code: code, name: '', start: start, end: end });
+    const flags = ver >= 4 ? dv.getUint8(pos++) : 0;
+    sources.push({ id: 'src_' + hash, code: code, name: '', start: start, end: end, noBalance: !!(flags & 1) });
   }
 
   const cellCount = dv.getUint16(pos, false); pos += 2;
@@ -1451,7 +2329,35 @@ function unpackData(str) {
     }
   }
 
-  return { sources: sources, cells: cells, year: year };
+  const spends = {};
+  if (ver >= 3) {
+    const spendCount = dv.getUint16(pos, false); pos += 2;
+    for (var m = 0; m < spendCount; m++) {
+      const ds = day16ToDate(dv.getInt16(pos, false)); pos += 2;
+      const v = dv.getInt32(pos, false); pos += 4;
+      if (ds) spends[ds] = String(v);
+    }
+  }
+
+  let fc = { balDate: '', balVal: '', limit: '', expenses: [] };
+  if (ver >= 4) {
+    fc.balDate = day16ToDate(dv.getInt16(pos, false)); pos += 2;
+    const balVal = dv.getInt32(pos, false); pos += 4;
+    fc.balVal = balVal !== 0 ? String(balVal) : '';
+    const limit = dv.getInt32(pos, false); pos += 4;
+    fc.limit = limit !== 0 ? String(limit) : '';
+    const expCount = dv.getUint8(pos++);
+    for (var n = 0; n < expCount; n++) {
+      const eDate = day16ToDate(dv.getInt16(pos, false)); pos += 2;
+      const eSum = dv.getInt32(pos, false); pos += 4;
+      const eFreq = freqVals[dv.getUint8(pos++)] || 'once';
+      const llen = dv.getUint8(pos++);
+      const label = dec.decode(bytes.slice(pos, pos + llen)); pos += llen;
+      fc.expenses.push({ date: eDate, sum: eSum !== 0 ? String(eSum) : '', label: label, freq: eFreq });
+    }
+  }
+
+  return { sources: sources, cells: cells, year: year, spends: spends, fc: fc };
 }
 
 function openSettings() {
@@ -1482,7 +2388,10 @@ function doImport() {
   const field = document.getElementById('import-field');
   try {
     const newState = unpackData(input);
-    state = newState;
+    state = Object.assign({}, newState, {
+      spends: newState.spends || state.spends,
+      fc: (newState.fc && (newState.fc.balVal || newState.fc.balDate || newState.fc.limit || newState.fc.expenses.length)) ? newState.fc : state.fc
+    });
     save();
     field.style.borderColor = 'var(--accent)';
     setTimeout(function() {
@@ -1540,15 +2449,25 @@ function renderSources() {
     html += '<input class="src-date-input" type="date" value="' + (s.start||'') + '" placeholder="начало" data-field="start" data-idx="' + i + '">';
     html += '<input class="src-date-input" type="date" value="' + (s.end||'') + '" placeholder="конец" data-field="end" data-idx="' + i + '">';
     html += '</div>';
+    html += '<label class="src-nobal"><input type="checkbox" data-field="noBalance" data-idx="' + i + '"' + (s.noBalance ? ' checked' : '') + '> не учитывать в балансе</label>';
     html += '<button class="src-del" data-idx="' + i + '">×</button>';
     html += '</div>';
   });
   list.innerHTML = html;
 
-  list.querySelectorAll('input[data-field]').forEach(function(inp) {
+  list.querySelectorAll('input[data-field]:not([type="checkbox"])').forEach(function(inp) {
     inp.addEventListener('change', function() {
       const idx = parseInt(this.dataset.idx);
       state.sources[idx][this.dataset.field] = this.value;
+      save();
+    });
+  });
+  list.querySelectorAll('input[type="checkbox"][data-field]').forEach(function(chk) {
+    chk.addEventListener('change', function() {
+      const idx = parseInt(this.dataset.idx);
+      state.sources[idx][this.dataset.field] = this.checked;
+      save();
+      recalcAllTotals();
     });
   });
   list.querySelectorAll('.src-del').forEach(function(btn) {
@@ -1566,7 +2485,8 @@ function addSource() {
     code: 'NEW',
     name: '',
     start: today(),
-    end: ''
+    end: '',
+    noBalance: false
   });
   renderSources();
 }
