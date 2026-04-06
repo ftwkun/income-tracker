@@ -1,4 +1,4 @@
-const CACHE = 'income-tracker-v1';
+const CACHE = 'income-tracker-v1.1';
 const FILES = [
   '/income-tracker/',
   '/income-tracker/index.html'
