@@ -2178,6 +2178,7 @@ function packData() {
   const cells = state.cells || {};
   const fc = state.fc || {};
   const fcExpenses = fc.expenses || [];
+  const fcIncomes = fc.incomes || [];
   const freqVals = ['once','daily','weekly','monthly','yearly'];
 
   // collect non-empty cells
@@ -2210,6 +2211,7 @@ function packData() {
   size += 2 + spendEntries.length * 6;
   size += 11; // fc header: balDate(2)+balVal(4)+limit(4)+expCount(1)
   fcExpenses.forEach(function(e, i) { size += 8 + expLabels[i].length; });
+  size += 1 + fcIncomes.length * 8; // incomeCount(1) + srcIdx(1)+date(2)+sum(4)+freq(1) each
   size += 4; // safety
 
   const buf = new ArrayBuffer(size + 512);
@@ -2218,7 +2220,7 @@ function packData() {
 
   dv.setUint8(pos++, 0x49); // 'I'
   dv.setUint8(pos++, 0x54); // 'T'
-  dv.setUint8(pos++, 0x04); // version 4
+  dv.setUint8(pos++, 0x05); // version 5
   dv.setInt16(pos, state.year || new Date().getFullYear(), false); pos += 2;
 
   // sources (v4: +1 byte flags: bit0=noBalance)
@@ -2273,14 +2275,24 @@ function packData() {
     lb.forEach(function(b) { dv.setUint8(pos++, b); });
   });
 
+  // fc.incomes
+  dv.setUint8(pos++, Math.min(fcIncomes.length, 255));
+  fcIncomes.forEach(function(e) {
+    const srcIdx = sources.findIndex(function(s) { return s.id === e.srcId; });
+    dv.setUint8(pos++, srcIdx >= 0 ? srcIdx : 0);
+    dv.setInt16(pos, dateToDay16(e.date), false); pos += 2;
+    dv.setInt32(pos, Math.round(parseFloat(e.sum) || 0), false); pos += 4;
+    dv.setUint8(pos++, Math.max(0, freqVals.indexOf(e.freq || 'monthly')));
+  });
+
   const bytes = new Uint8Array(buf, 0, pos);
-  let hex = 'IT4';
+  let hex = 'IT5';
   bytes.forEach(function(b) { hex += b.toString(16).padStart(2,'0'); });
   return hex;
 }
 
 function unpackData(str) {
-  if (!str.startsWith('IT2') && !str.startsWith('IT3') && !str.startsWith('IT4')) throw new Error('bad format');
+  if (!str.startsWith('IT2') && !str.startsWith('IT3') && !str.startsWith('IT4') && !str.startsWith('IT5')) throw new Error('bad format');
   const hexStr = str.slice(3);
   const bytes = new Uint8Array(hexStr.length / 2);
   for (var i = 0; i < bytes.length; i++) {
@@ -2339,7 +2351,7 @@ function unpackData(str) {
     }
   }
 
-  let fc = { balDate: '', balVal: '', limit: '', expenses: [] };
+  let fc = { balDate: '', balVal: '', limit: '', expenses: [], incomes: [] };
   if (ver >= 4) {
     fc.balDate = day16ToDate(dv.getInt16(pos, false)); pos += 2;
     const balVal = dv.getInt32(pos, false); pos += 4;
@@ -2354,6 +2366,17 @@ function unpackData(str) {
       const llen = dv.getUint8(pos++);
       const label = dec.decode(bytes.slice(pos, pos + llen)); pos += llen;
       fc.expenses.push({ date: eDate, sum: eSum !== 0 ? String(eSum) : '', label: label, freq: eFreq });
+    }
+  }
+  if (ver >= 5) {
+    const incCount = dv.getUint8(pos++);
+    for (var p = 0; p < incCount; p++) {
+      const srcIdx = dv.getUint8(pos++);
+      const iDate = day16ToDate(dv.getInt16(pos, false)); pos += 2;
+      const iSum = dv.getInt32(pos, false); pos += 4;
+      const iFreq = freqVals[dv.getUint8(pos++)] || 'monthly';
+      const srcId = srcIdx < sources.length ? sources[srcIdx].id : '';
+      if (srcId) fc.incomes.push({ srcId: srcId, date: iDate, sum: iSum !== 0 ? String(iSum) : '', freq: iFreq });
     }
   }
 
