@@ -682,11 +682,18 @@ function load() {
   if (!state.fc) state.fc = { balDate: '', balVal: '', limit: '', expenses: [], incomes: [] };
   if (!state.fc.incomes) state.fc.incomes = [];
   if (state.sourcesCollapsed === undefined) state.sourcesCollapsed = true;
+  if (!state.actionLog) state.actionLog = [];
   if (state.collapsedMonths) collapsedMonths = state.collapsedMonths;
 }
 
 function save() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch(e) {}
+}
+
+function logAction() {
+  const ds = today();
+  if (!state.actionLog) state.actionLog = [];
+  if (state.actionLog[state.actionLog.length - 1] !== ds) state.actionLog.push(ds);
 }
 
 function cellKey(date, srcId) { return date + '|' + srcId; }
@@ -1302,20 +1309,27 @@ function renderTimeline(days) {
   tl.style.display = 'block';
   track.innerHTML = '';
 
-  // collect data dates from cell keys (reliable, no overflow issues)
-  const dateTimes = [];
+  // collect edit dates from cell history (h.ts = ISO string, no overflow) + actionLog
+  const dateSet = new Set();
   Object.keys(state.cells).forEach(function(key) {
-    const ds = key.split('|')[0];
-    if (ds && ds.length === 10) {
-      const t = new Date(ds).getTime();
-      if (!isNaN(t) && t > 0) dateTimes.push(t);
+    const cell = state.cells[key];
+    if (!cell.history) return;
+    cell.history.forEach(function(h) {
+      if (!h.ts) return;
+      const ds = h.ts.slice(0, 10);
+      if (ds && ds.length === 10) dateSet.add(ds);
+    });
+    // current value counts as today if non-empty
+    if (cell.value && parseFloat(cell.value) !== 0) {
+      // we have no "written at" ts for current value, skip — history entries cover it
     }
   });
-  Object.keys(state.spends || {}).forEach(function(ds) {
-    const t = new Date(ds).getTime();
-    if (!isNaN(t) && t > 0) dateTimes.push(t);
-  });
+  // forecast calc / edit days
+  (state.actionLog || []).forEach(function(ds) { if (ds) dateSet.add(ds); });
 
+  if (dateSet.size === 0) return;
+
+  const dateTimes = Array.from(dateSet).map(function(ds) { return new Date(ds).getTime(); }).filter(function(t) { return !isNaN(t) && t > 0; });
   if (dateTimes.length === 0) return;
 
   const range = getDataRange();
@@ -1954,7 +1968,7 @@ function fcExpenseEl(e, idx) {
 
   const del = document.createElement('button');
   del.className = 'fc-del'; del.textContent = '×';
-  del.onclick = function() { state.fc.expenses.splice(idx, 1); renderFcExpenses(); };
+  del.onclick = function() { state.fc.expenses.splice(idx, 1); logAction(); save(); renderFcExpenses(); };
 
   row1.appendChild(dateInp); row1.appendChild(sumInp); row1.appendChild(labelInp); row1.appendChild(del);
 
@@ -2051,6 +2065,7 @@ function fcCalc() {
   futureDays.forEach(function(ds) {
     if (spendMap[ds]) state.spends[ds] = spendMap[ds];
   });
+  logAction();
   save();
   closeForecast();
   renderMatrix();
@@ -2100,7 +2115,7 @@ function fcIncomeEl(e, idx) {
 
   const del = document.createElement('button');
   del.className = 'fc-del'; del.textContent = '×';
-  del.onclick = function() { state.fc.incomes.splice(idx, 1); renderFcIncomes(); };
+  del.onclick = function() { state.fc.incomes.splice(idx, 1); logAction(); save(); renderFcIncomes(); };
 
   row1.appendChild(dateInp); row1.appendChild(sumInp); row1.appendChild(srcSel); row1.appendChild(del);
 
@@ -2170,6 +2185,7 @@ function fcIncCalc() {
     setCell(e.date, e.srcId, String(Math.round(e.sum)));
   });
 
+  logAction();
   save();
   closeIncForecast();
   renderMatrix();
