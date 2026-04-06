@@ -166,13 +166,13 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); font
   padding: 0 6px; cursor: pointer;
 }
 .m-cell input:focus { background: rgba(74,222,128,0.08); color: var(--accent); }
-.m-cell input.has-value { color: var(--accent2); }
+.m-cell input.has-value { color: var(--warn); }
 .m-cell input.zero { color: var(--muted); }
 
 /* row states */
 tr.past td:first-child { color: var(--muted); }
 tr.past .m-cell input { color: var(--muted2); }
-tr.past .m-cell input.has-value { color: rgba(34,211,238,0.5); }
+tr.past .m-cell input.has-value { color: rgba(251,191,36,0.5); }
 tr.today td { background: var(--today-bg) !important; }
 tr.today td:first-child { color: var(--accent) !important; font-weight: 600; }
 tr.month-sep td { border-top: 1px solid var(--border2); }
@@ -681,6 +681,7 @@ function load() {
   if (!state.year) state.year = new Date().getFullYear();
   if (!state.fc) state.fc = { balDate: '', balVal: '', limit: '', expenses: [], incomes: [] };
   if (!state.fc.incomes) state.fc.incomes = [];
+  if (state.sourcesCollapsed === undefined) state.sourcesCollapsed = true;
   if (state.collapsedMonths) collapsedMonths = state.collapsedMonths;
 }
 
@@ -972,7 +973,7 @@ function renderMatrix() {
   html += '<th>дата</th>';
   html += '<th class="col-spend" style="color:var(--danger);">траты</th>';
   sources.forEach(function(s) { html += '<th>' + s.code + '</th>'; });
-  html += '<th class="col-income-total" style="color:var(--accent2);white-space:nowrap;">доходы</th>';
+  html += '<th class="col-income-total" style="color:var(--warn);white-space:nowrap;">доходы</th>';
   html += '<th class="col-morning" style="color:var(--muted2);white-space:nowrap;">утро</th>';
   html += '<th class="col-evening" style="color:var(--muted2);white-space:nowrap;">вечер</th>';
   html += '<th class="mo-sum col-row-total" style="color:var(--warn);white-space:nowrap;">дельта</th>';
@@ -1025,10 +1026,10 @@ function renderMatrix() {
     // source cols (скрыты в свёрнутом режиме через CSS)
     sources.forEach(function(s) {
       const v = mt[s.id] || 0;
-      r += '<td style="' + S + 'color:' + (v > 0 ? 'var(--accent2)' : 'var(--muted)') + ';opacity:0.7;">' + (v > 0 ? fmtNum(v) : '') + '</td>';
+      r += '<td style="' + S + 'color:' + (v > 0 ? 'var(--warn)' : 'var(--muted)') + ';opacity:0.7;">' + (v > 0 ? fmtNum(v) : '') + '</td>';
     });
     // доходы (col-income-total position — видна в свёрнутом режиме)
-    r += '<td class="col-income-total" style="' + S + 'color:' + (mt.row > 0 ? 'var(--accent2)' : 'var(--muted)') + ';">' + (mt.row > 0 ? fmtNum(mt.row) : '—') + '</td>';
+    r += '<td class="col-income-total" style="' + S + 'color:' + (mt.row > 0 ? 'var(--warn)' : 'var(--muted)') + ';">' + (mt.row > 0 ? fmtNum(mt.row) : '—') + '</td>';
     // утро (col-morning position — баланс начала месяца)
     r += '<td class="col-morning" style="' + S + 'color:' + (mb.start < 0 ? 'var(--danger)' : 'var(--muted2)') + ';">' + (mb.start !== 0 ? fmtNum(mb.start) : '—') + '</td>';
     // вечер (col-evening position — баланс конца месяца)
@@ -1092,7 +1093,7 @@ function renderMatrix() {
     });
 
     // income total col
-    const incColor = rowTotal > 0 ? 'var(--accent2)' : 'var(--muted)';
+    const incColor = rowTotal > 0 ? 'var(--warn)' : 'var(--muted)';
     html += '<td class="col-income-total" style="color:' + incColor + ';">' + (rowTotal > 0 ? fmtNum(rowTotal) : '') + '</td>';
 
     // morning/evening balance
@@ -1102,8 +1103,10 @@ function renderMatrix() {
     html += '<td class="col-morning" style="color:' + mornColor + ';">' + (bals.morning !== 0 ? fmtNum(bals.morning) : '') + '</td>';
     html += '<td class="col-evening" style="color:' + evenColor + ';">' + (bals.evening !== 0 ? fmtNum(bals.evening) : '') + '</td>';
 
-    const totalCls = rowTotal > 0 ? 'm-total' : 'zero';
-    html += '<td class="col-row-total ' + totalCls + '" style="padding:0 8px;text-align:right;">' + (rowTotal > 0 ? fmtNum(rowTotal) : '') + '</td>';
+    const dayResult = rowTotal - spendV;
+    const dayResColor = dayResult > 0 ? 'var(--accent)' : dayResult < 0 ? 'var(--danger)' : 'var(--muted)';
+    const dayResText = dayResult > 0 ? '+' + fmtNum(dayResult) : dayResult < 0 ? fmtNum(dayResult) : '';
+    html += '<td class="col-row-total" style="padding:0 8px;text-align:right;font-family:var(--mono);font-size:11px;color:' + dayResColor + ';">' + dayResText + '</td>';
     html += '</tr>';
   });
 
@@ -1132,7 +1135,7 @@ function renderMatrix() {
       (total > 0 ? fmtNum(total) : '—') + '</span></td>';
   });
   // доходы (col-income-total position)
-  html += '<td class="col-income-total" style="' + YS + 'color:' + (grandTotal > 0 ? 'var(--accent2)' : 'var(--muted)') + ';">' + (grandTotal > 0 ? fmtNum(grandTotal) : '—') + '</td>';
+  html += '<td class="col-income-total" style="' + YS + 'color:' + (grandTotal > 0 ? 'var(--warn)' : 'var(--muted)') + ';">' + (grandTotal > 0 ? fmtNum(grandTotal) : '—') + '</td>';
   // утро 1 янв (col-morning position)
   html += '<td class="col-morning" style="' + YS + 'color:' + (yearStart < 0 ? 'var(--danger)' : 'var(--muted2)') + ';">' + (yearStart !== 0 ? fmtNum(yearStart) : '—') + '</td>';
   // вечер 31 дек (col-evening position)
@@ -1142,6 +1145,17 @@ function renderMatrix() {
   html += '<td class="col-row-total" style="' + YS + 'font-size:12px;color:' + yearDeltaColor + ';">' + (yearDelta !== 0 ? (yearDelta > 0 ? '+' : '') + fmtNum(yearDelta) : '—') + '</td>';
   html += '</tr></tbody></table>';
   wrap.innerHTML = html;
+
+  // restore collapsed-sources state (default: collapsed)
+  const matrix = document.getElementById('matrix');
+  const colBtn = document.getElementById('btn-collapse-src');
+  if (state.sourcesCollapsed) {
+    matrix.classList.add('sources-collapsed');
+    if (colBtn) { colBtn.classList.add('active'); colBtn.textContent = '⊞'; }
+  } else {
+    matrix.classList.remove('sources-collapsed');
+    if (colBtn) { colBtn.classList.remove('active'); colBtn.textContent = '⊟'; }
+  }
 
   setTimeout(function() {
     const rows = wrap.querySelectorAll('tr.today');
@@ -1181,7 +1195,7 @@ function renderMatrix() {
         sources.forEach(function(s, i) {
           const v = moTotals[s.id] || 0;
           cells[i + 2].textContent = v !== 0 ? fmtNum(v) : '';
-          cells[i + 2].style.color = v !== 0 ? 'var(--accent2)' : 'var(--muted)';
+          cells[i + 2].style.color = v !== 0 ? 'var(--warn)' : 'var(--muted)';
         });
         // обновить доходы в col-income-total (N+2 от начала)
         cells[sources.length + 2].textContent = moTotals.row !== 0 ? fmtNum(moTotals.row) : '';
@@ -1288,29 +1302,31 @@ function renderTimeline(days) {
   tl.style.display = 'block';
   track.innerHTML = '';
 
-  // collect all edit timestamps from history only
-  const editTimes = [];
+  // collect data dates from cell keys (reliable, no overflow issues)
+  const dateTimes = [];
   Object.keys(state.cells).forEach(function(key) {
-    const cell = state.cells[key];
-    if (cell.history) {
-      cell.history.forEach(function(h) {
-        if (!h.ts) return;
-        const t = new Date(h.ts).getTime();
-        if (!isNaN(t) && t > 0) editTimes.push(t);
-      });
+    const ds = key.split('|')[0];
+    if (ds && ds.length === 10) {
+      const t = new Date(ds).getTime();
+      if (!isNaN(t) && t > 0) dateTimes.push(t);
     }
   });
+  Object.keys(state.spends || {}).forEach(function(ds) {
+    const t = new Date(ds).getTime();
+    if (!isNaN(t) && t > 0) dateTimes.push(t);
+  });
 
-  if (editTimes.length === 0) return;
+  if (dateTimes.length === 0) return;
 
-  const minTs = Math.min.apply(null, editTimes);
-  const maxTs = Math.max.apply(null, editTimes);
-  const range = maxTs - minTs || 1;
+  const range = getDataRange();
+  const minTs = range.min;
+  const maxTs = range.max;
+  const span = maxTs - minTs || 1;
 
-  // unique timestamps → markers
-  const uniqueTs = [...new Set(editTimes)].sort(function(a,b){return a-b;});
+  // unique day timestamps → markers
+  const uniqueTs = Array.from(new Set(dateTimes)).sort(function(a,b){return a-b;});
   uniqueTs.forEach(function(ts) {
-    const pct = (ts - minTs) / range * 100;
+    const pct = (ts - minTs) / span * 100;
     const marker = document.createElement('div');
     marker.className = 'tl-marker';
     marker.style.top = pct + '%';
@@ -1363,8 +1379,9 @@ function tlMove(clientY) {
   cursor.style.top = (pct * 100) + '%';
 
   // find timestamp at this position
-  const minTs = getMinTs();
-  const maxTs = Date.now();
+  const dr = getDataRange();
+  const minTs = dr.min;
+  const maxTs = dr.max;
   const ts = minTs + pct * (maxTs - minTs);
   const dt = new Date(ts);
   const label = document.getElementById('tl-label');
@@ -1375,18 +1392,19 @@ function tlMove(clientY) {
   setViewDate(dt.toISOString(), true);
 }
 
-function getMinTs() {
+function getDataRange() {
   const times = [];
   Object.keys(state.cells).forEach(function(key) {
-    const cell = state.cells[key];
-    if (cell.history) cell.history.forEach(function(h) {
-      if (!h.ts) return;
-      const t = new Date(h.ts).getTime();
-      if (!isNaN(t) && t > 0) times.push(t);
-    });
+    const ds = key.split('|')[0];
+    if (ds && ds.length === 10) { const t = new Date(ds).getTime(); if (!isNaN(t)) times.push(t); }
   });
-  return times.length ? Math.min.apply(null, times) : Date.now() - 86400000;
+  Object.keys(state.spends || {}).forEach(function(ds) {
+    const t = new Date(ds).getTime(); if (!isNaN(t)) times.push(t);
+  });
+  if (!times.length) { const now = Date.now(); return { min: now - 86400000, max: now }; }
+  return { min: Math.min.apply(null, times), max: Math.max.apply(null, times) };
 }
+function getMinTs() { return getDataRange().min; }
 
 function setViewDate(isoStr, preview) {
   viewDate = isoStr;
@@ -1452,7 +1470,7 @@ function recalcAllTotals() {
     const spCell = hdr.querySelector('.mo-spend');
     if (spCell) { spCell.textContent = ms.spend > 0 ? fmtNum(ms.spend) : '—'; spCell.style.color = ms.spend > 0 ? 'rgba(248,113,113,0.9)' : 'var(--muted)'; }
     const incCell = hdr.querySelector('.mo-income');
-    if (incCell) { incCell.textContent = ms.income > 0 ? fmtNum(ms.income) : '—'; incCell.style.color = ms.income > 0 ? 'var(--accent2)' : 'var(--muted)'; }
+    if (incCell) { incCell.textContent = ms.income > 0 ? fmtNum(ms.income) : '—'; incCell.style.color = ms.income > 0 ? 'var(--warn)' : 'var(--muted)'; }
     const mornCell = hdr.querySelector('.mo-morning');
     if (mornCell) { mornCell.textContent = ms.startBal !== 0 ? fmtNum(ms.startBal) : '—'; mornCell.style.color = ms.startBal < 0 ? 'var(--danger)' : 'var(--muted2)'; }
     const evenCell = hdr.querySelector('.mo-evening');
@@ -1486,8 +1504,19 @@ function recalcAllTotals() {
       if (noBalIds.has(inp.dataset.src)) return;
       const v = parseFloat(inp.value); if (!isNaN(v)) total += v;
     });
+    // income col
+    const incCell = row.querySelector('.col-income-total');
+    if (incCell) { incCell.textContent = total > 0 ? fmtNum(total) : ''; incCell.style.color = total > 0 ? 'var(--warn)' : 'var(--muted)'; }
+    // day result col
+    const spendInp = row.querySelector('input[data-spend-date]');
+    const spend = spendInp ? (parseFloat(spendInp.value) || 0) : (parseFloat((state.spends || {})[ds]) || 0);
+    const result = total - spend;
     const last = row.querySelector('.col-row-total');
-    if (last) { last.textContent = total !== 0 ? fmtNum(total) : ''; last.className = 'col-row-total ' + (total !== 0 ? 'm-total' : 'zero'); }
+    if (last) {
+      last.textContent = result !== 0 ? (result > 0 ? '+' : '') + fmtNum(result) : '';
+      last.style.color = result > 0 ? 'var(--accent)' : result < 0 ? 'var(--danger)' : 'var(--muted)';
+      last.className = 'col-row-total';
+    }
   });
 }
 
@@ -2153,6 +2182,8 @@ function toggleSourcesCols() {
   const collapsed = matrix.classList.toggle('sources-collapsed');
   btn.classList.toggle('active', collapsed);
   btn.textContent = collapsed ? '⊞' : '⊟';
+  state.sourcesCollapsed = collapsed;
+  save();
   recalcAllTotals();
 }
 
