@@ -546,9 +546,7 @@ td.col-income-total, td.col-morning, td.col-evening { padding: 0 6px; text-align
 <body>
 <div id="app">
   <div id="header">
-    <h1>income //</h1>
     <button class="mode-btn active" id="btn-matrix" onclick="setMode('matrix')">матрица</button>
-    <button class="mode-btn" id="btn-day" onclick="setMode('day')">день</button>
     <button class="mode-btn" id="btn-forecast" onclick="openForecast()">прогноз трат</button>
     <button class="mode-btn" id="btn-inc-forecast" onclick="openIncForecast()">прогноз доходов</button>
     <button id="btn-sources" onclick="openSources()">источники</button>
@@ -670,20 +668,29 @@ td.col-income-total, td.col-morning, td.col-evening { padding: 0 6px; text-align
 const STORE_KEY = 'income_tracker_v1';
 let state = { sources: [], cells: {}, spends: {}, year: new Date().getFullYear(), fc: { balDate: '', balVal: '', limit: '', expenses: [] } };
 
-function load() {
-  try {
-    const s = localStorage.getItem(STORE_KEY);
-    if (s) state = JSON.parse(s);
-  } catch(e) {}
+function initState() {
   if (!state.sources) state.sources = [];
   if (!state.cells) state.cells = {};
   if (!state.spends) state.spends = {};
+  if (!state.spendHistory) state.spendHistory = {};
   if (!state.year) state.year = new Date().getFullYear();
   if (!state.fc) state.fc = { balDate: '', balVal: '', limit: '', expenses: [], incomes: [] };
   if (!state.fc.incomes) state.fc.incomes = [];
   if (state.sourcesCollapsed === undefined) state.sourcesCollapsed = true;
   if (!state.actionLog) state.actionLog = [];
-  if (state.collapsedMonths) collapsedMonths = state.collapsedMonths;
+  if (!state.collapsedMonths) {
+    state.collapsedMonths = {};
+    const cur = new Date().getMonth();
+    for (var i = 0; i < 12; i++) { if (i !== cur) state.collapsedMonths[i] = true; }
+  }
+}
+
+function load() {
+  try {
+    const s = localStorage.getItem(STORE_KEY);
+    if (s) state = JSON.parse(s);
+  } catch(e) {}
+  initState();
 }
 
 function save() {
@@ -693,7 +700,32 @@ function save() {
 function logAction() {
   const ds = today();
   if (!state.actionLog) state.actionLog = [];
-  if (state.actionLog[state.actionLog.length - 1] !== ds) state.actionLog.push(ds);
+  if (!state.actionLog.includes(ds)) state.actionLog.push(ds);
+}
+
+function setSpend(ds, rawValue) {
+  const v = parseFloat(rawValue) || 0;
+  const newStr = v > 0 ? String(Math.round(v)) : '';
+  const oldStr = state.spends[ds] != null ? String(Math.round(parseFloat(state.spends[ds]) || 0)) : '';
+  if (oldStr === newStr) return;
+  if (!state.spendHistory) state.spendHistory = {};
+  if (!state.spendHistory[ds]) state.spendHistory[ds] = [];
+  state.spendHistory[ds].push({ value: oldStr, ts: new Date().toISOString() });
+  if (v > 0) state.spends[ds] = v; else delete state.spends[ds];
+}
+
+function getSpendAt(ds, viewTs) {
+  const hist = (state.spendHistory || {})[ds] || [];
+  const curStr = state.spends[ds] != null ? String(Math.round(parseFloat(state.spends[ds]) || 0)) : '';
+  if (!hist.length) return parseFloat(curStr) || 0;
+  // hist[i].value = value that existed BEFORE hist[i].ts was recorded
+  let val = hist[0].value;
+  for (var i = 0; i < hist.length; i++) {
+    if (new Date(hist[i].ts).getTime() <= viewTs) {
+      val = (i + 1 < hist.length) ? hist[i + 1].value : curStr;
+    }
+  }
+  return parseFloat(val) || 0;
 }
 
 function cellKey(date, srcId) { return date + '|' + srcId; }
@@ -791,7 +823,6 @@ let mode = 'matrix';
 function setMode(m) {
   mode = m;
   document.getElementById('btn-matrix').classList.toggle('active', m === 'matrix');
-  document.getElementById('btn-day').classList.toggle('active', m === 'day');
   document.getElementById('matrix-wrap').style.display = m === 'matrix' ? 'block' : 'none';
   document.getElementById('day-wrap').style.display = m === 'day' ? 'block' : 'none';
   if (m === 'matrix') renderMatrix();
@@ -799,17 +830,7 @@ function setMode(m) {
 }
 
 // ── Matrix ─────────────────────────────────────────────────────────────
-let collapsedMonths = {};
-// init: collapse all months except current, restore from state
 (function() {
-  const currentMonth = new Date().getMonth();
-  if (state.collapsedMonths) {
-    collapsedMonths = state.collapsedMonths;
-  } else {
-    for (var i = 0; i < 12; i++) {
-      if (i !== currentMonth) collapsedMonths[i] = true;
-    }
-  }
 })();
 
 function toggleDayDetail(e, td) {
@@ -938,7 +959,7 @@ function toggleDayDetail(e, td) {
   spInp.addEventListener('keydown', function(ev) { if (ev.key === 'Enter') this.blur(); });
   spInp.addEventListener('change', function() {
     const v = parseFloat(this.value);
-    if (!isNaN(v) && v > 0) state.spends[ds] = v; else delete state.spends[ds];
+    setSpend(ds, v);
     this.className = 'entry-input spend mdd-inp' + ((!isNaN(v) && v > 0) ? ' has-value' : '');
     const mx = document.querySelector('input[data-spend-date="' + ds + '"]:not(.mdd-inp)');
     if (mx) { mx.value = (!isNaN(v) && v > 0) ? Math.round(v) : ''; mx.className = (!isNaN(v) && v > 0) ? 'has-value' : ''; }
@@ -955,17 +976,16 @@ function toggleDayDetail(e, td) {
 }
 
 function toggleMonth(mo) {
-  collapsedMonths[mo] = !collapsedMonths[mo];
-  state.collapsedMonths = collapsedMonths;
+  state.collapsedMonths[mo] = !state.collapsedMonths[mo];
   save();
   const rows = document.querySelectorAll('tr[data-month="' + mo + '"]');
   rows.forEach(function(r) {
-    r.style.display = collapsedMonths[mo] ? 'none' : '';
+    r.style.display = state.collapsedMonths[mo] ? 'none' : '';
   });
   const hdr = document.querySelector('tr.month-total-row[data-mo="' + mo + '"]');
   if (hdr) {
     const arrow = hdr.querySelector('.mo-arrow');
-    if (arrow) arrow.textContent = collapsedMonths[mo] ? '▶' : '▼';
+    if (arrow) arrow.textContent = state.collapsedMonths[mo] ? '▶' : '▼';
   }
 }
 
@@ -1017,7 +1037,7 @@ function renderMatrix() {
   function monthTotalRow(mo, placement) {
     const mt = monthTotals[mo] || { row: 0, spend: 0 };
     const mb = monthBals[mo] || { start: 0, end: 0 };
-    const collapsed = collapsedMonths[mo];
+    const collapsed = state.collapsedMonths[mo];
     const arrow = placement === 'before' ? (collapsed ? '▶' : '▼') : '';
     const delta = mt.row - mt.spend;
 
@@ -1073,7 +1093,7 @@ function renderMatrix() {
     if (mo !== prevMonth2) { html += monthTotalRow(mo, 'before'); }
     prevMonth2 = mo;
 
-    const collapsed = collapsedMonths[mo];
+    const collapsed = state.collapsedMonths[mo];
     let cls = isPast ? 'past' : isToday ? 'today' : 'future';
     if (isWeekend) cls += ' weekend';
 
@@ -1220,13 +1240,8 @@ function renderMatrix() {
     inp.addEventListener('change', function() {
       const ds = this.dataset.spendDate;
       const v = parseFloat(this.value);
-      if (!isNaN(v) && v !== 0) {
-        state.spends[ds] = v;
-        this.className = 'has-value';
-      } else {
-        delete state.spends[ds];
-        this.className = '';
-      }
+      setSpend(ds, v);
+      this.className = (!isNaN(v) && v !== 0) ? 'has-value' : '';
       save();
     });
     inp.addEventListener('focus', function() { this.select(); });
@@ -1309,36 +1324,41 @@ function renderTimeline(days) {
   tl.style.display = 'block';
   track.innerHTML = '';
 
-  // collect edit dates from cell history (h.ts = ISO string, no overflow) + actionLog
-  const dateSet = new Set();
+  // collect exact edit timestamps from cell history (h.ts = ISO string)
+  const tsSet = new Set();
   Object.keys(state.cells).forEach(function(key) {
     const cell = state.cells[key];
     if (!cell.history) return;
     cell.history.forEach(function(h) {
       if (!h.ts) return;
-      const ds = h.ts.slice(0, 10);
-      if (ds && ds.length === 10) dateSet.add(ds);
+      const t = new Date(h.ts).getTime();
+      if (!isNaN(t) && t > 0) tsSet.add(t);
     });
-    // current value counts as today if non-empty
-    if (cell.value && parseFloat(cell.value) !== 0) {
-      // we have no "written at" ts for current value, skip — history entries cover it
-    }
   });
-  // forecast calc / edit days
-  (state.actionLog || []).forEach(function(ds) { if (ds) dateSet.add(ds); });
+  // spend history timestamps
+  Object.keys(state.spendHistory || {}).forEach(function(ds) {
+    (state.spendHistory[ds] || []).forEach(function(h) {
+      if (!h.ts) return;
+      const t = new Date(h.ts).getTime();
+      if (!isNaN(t) && t > 0) tsSet.add(t);
+    });
+  });
+  // forecast calc / edit days (stored as date strings → end-of-day so they sit after the action)
+  (state.actionLog || []).forEach(function(ds) {
+    if (!ds) return;
+    const t = new Date(ds + 'T23:59:59').getTime();
+    if (!isNaN(t) && t > 0) tsSet.add(t);
+  });
 
-  if (dateSet.size === 0) return;
-
-  const dateTimes = Array.from(dateSet).map(function(ds) { return new Date(ds).getTime(); }).filter(function(t) { return !isNaN(t) && t > 0; });
-  if (dateTimes.length === 0) return;
+  if (tsSet.size === 0) return;
 
   const range = getDataRange();
   const minTs = range.min;
-  const maxTs = range.max;
+  const maxTs = Math.min(range.max, Date.now());
   const span = maxTs - minTs || 1;
 
-  // unique day timestamps → markers
-  const uniqueTs = Array.from(new Set(dateTimes)).sort(function(a,b){return a-b;});
+  // deduplicate to one marker per minute (avoid stacking), sort ascending
+  const uniqueTs = Array.from(tsSet).filter(function(t) { return t <= maxTs; }).sort(function(a,b){return a-b;});
   uniqueTs.forEach(function(ts) {
     const pct = (ts - minTs) / span * 100;
     const marker = document.createElement('div');
@@ -1392,10 +1412,10 @@ function tlMove(clientY) {
   const cursor = document.getElementById('tl-cursor');
   cursor.style.top = (pct * 100) + '%';
 
-  // find timestamp at this position
+  // find timestamp at this position — cap max at today (future forecast dates not useful for history)
   const dr = getDataRange();
   const minTs = dr.min;
-  const maxTs = dr.max;
+  const maxTs = Math.min(dr.max, Date.now());
   const ts = minTs + pct * (maxTs - minTs);
   const dt = new Date(ts);
   const label = document.getElementById('tl-label');
@@ -1443,6 +1463,13 @@ function setViewDate(isoStr, preview) {
     inp.className = (!isNaN(n) && n !== 0) ? 'has-value' : 'zero';
   });
 
+  // update spend inputs to historical values
+  document.querySelectorAll('input[data-spend-date]').forEach(function(inp) {
+    const v = getSpendAt(inp.dataset.spendDate, ts);
+    inp.value = v > 0 ? Math.round(v) : '';
+    inp.className = v > 0 ? 'has-value' : '';
+  });
+
   document.getElementById('matrix').classList.add('history-mode');
   if (!preview) document.getElementById('tl-label').style.display = 'none';
   recalcAllTotals();
@@ -1452,7 +1479,22 @@ function recalcAllTotals() {
   const sources = state.sources;
   const days = daysInYear(state.year);
 
-  // compute from state directly (not DOM) for accuracy
+  // in history mode reconstruct value at viewDate timestamp directly from state (no DOM queries)
+  const viewTs = viewDate ? new Date(viewDate).getTime() : 0;
+  function getCellVal(ds, srcId) {
+    if (!viewDate) return getCell(ds, srcId).value;
+    const cell = state.cells[ds + '|' + srcId];
+    if (!cell) return '';
+    const hist = cell.history || [];
+    let val = '';
+    for (var _i = 0; _i < hist.length; _i++) {
+      if (new Date(hist[_i].ts).getTime() <= viewTs) val = hist[_i].value;
+    }
+    const lastTs = hist.length ? new Date(hist[hist.length - 1].ts).getTime() : 0;
+    if (lastTs <= viewTs) val = cell.value;
+    return val;
+  }
+
   let runBal = parseFloat((state.fc || {}).balVal) || 0;
   const monthSummary = {};
   let curMo = -1;
@@ -1463,11 +1505,11 @@ function recalcAllTotals() {
       monthSummary[mo] = { spend: 0, income: 0, startBal: runBal, endBal: 0 };
       curMo = mo;
     }
-    const spend = parseFloat(state.spends[ds]) || 0;
+    const spend = viewDate ? getSpendAt(ds, viewTs) : (parseFloat(state.spends[ds]) || 0);
     let inc = 0;
     sources.forEach(function(s) {
       if (s.noBalance) return;
-      const v = parseFloat(getCell(ds, s.id).value);
+      const v = parseFloat(getCellVal(ds, s.id));
       if (!isNaN(v)) inc += v;
     });
     monthSummary[mo].spend += spend;
@@ -1481,31 +1523,30 @@ function recalcAllTotals() {
     const hdr = document.querySelector('tr.month-total-row[data-mo="' + mo + '"]');
     if (!hdr) return;
 
-    const spCell = hdr.querySelector('.mo-spend');
-    if (spCell) { spCell.textContent = ms.spend > 0 ? fmtNum(ms.spend) : '—'; spCell.style.color = ms.spend > 0 ? 'rgba(248,113,113,0.9)' : 'var(--muted)'; }
-    const incCell = hdr.querySelector('.mo-income');
-    if (incCell) { incCell.textContent = ms.income > 0 ? fmtNum(ms.income) : '—'; incCell.style.color = ms.income > 0 ? 'var(--warn)' : 'var(--muted)'; }
-    const mornCell = hdr.querySelector('.mo-morning');
-    if (mornCell) { mornCell.textContent = ms.startBal !== 0 ? fmtNum(ms.startBal) : '—'; mornCell.style.color = ms.startBal < 0 ? 'var(--danger)' : 'var(--muted2)'; }
-    const evenCell = hdr.querySelector('.mo-evening');
-    if (evenCell) { evenCell.textContent = ms.endBal !== 0 ? fmtNum(ms.endBal) : '—'; evenCell.style.color = ms.endBal < 0 ? 'var(--danger)' : ms.endBal > ms.startBal ? 'var(--accent)' : 'var(--muted2)'; }
-    const delta = ms.income - ms.spend;
-    const deltaCell = hdr.querySelector('.mo-delta');
-    if (deltaCell) { deltaCell.textContent = delta !== 0 ? (delta > 0 ? '+' : '') + fmtNum(delta) : '—'; deltaCell.style.color = delta > 0 ? 'var(--accent)' : delta < 0 ? 'var(--danger)' : 'var(--warn)'; }
-
-    // per-source cells (no class, between col-spend and col-income-total)
+    // td[0]=name, td[1]=spend, td[2..n+1]=sources, td[n+2]=income, td[n+3]=morning, td[n+4]=evening, td[n+5]=delta
     const allTds = hdr.querySelectorAll('td');
-    // td[0]=name, td[1]=spend, td[2..n+1]=sources, td[n+2]=income, td[n+3]=morning, td[n+4]=evening, td[n+5]=total
+    const n = sources.length;
+
+    const spCell = allTds[1];
+    if (spCell) { spCell.textContent = ms.spend > 0 ? fmtNum(ms.spend) : '—'; spCell.style.color = ms.spend > 0 ? 'rgba(248,113,113,0.9)' : 'var(--muted)'; }
+
     sources.forEach(function(s, i) {
       const daysInMo = days.filter(function(ds) { return new Date(ds).getMonth() === parseInt(mo); });
       let v = 0;
-      daysInMo.forEach(function(ds) { const n = parseFloat(getCell(ds, s.id).value); if (!isNaN(n)) v += n; });
+      daysInMo.forEach(function(ds) { const val = parseFloat(getCellVal(ds, s.id)); if (!isNaN(val)) v += val; });
       const cell = allTds[i + 2];
-      if (cell) {
-        cell.textContent = v !== 0 ? fmtNum(v) : '';
-        cell.style.color = v !== 0 ? 'var(--accent2)' : 'var(--muted)';
-      }
+      if (cell) { cell.textContent = v !== 0 ? fmtNum(v) : ''; cell.style.color = v !== 0 ? 'var(--warn)' : 'var(--muted)'; }
     });
+
+    const incCell = allTds[n + 2];
+    if (incCell) { incCell.textContent = ms.income > 0 ? fmtNum(ms.income) : '—'; incCell.style.color = ms.income > 0 ? 'var(--warn)' : 'var(--muted)'; }
+    const mornCell = allTds[n + 3];
+    if (mornCell) { mornCell.textContent = ms.startBal !== 0 ? fmtNum(ms.startBal) : '—'; mornCell.style.color = ms.startBal < 0 ? 'var(--danger)' : 'var(--muted2)'; }
+    const evenCell = allTds[n + 4];
+    if (evenCell) { evenCell.textContent = ms.endBal !== 0 ? fmtNum(ms.endBal) : '—'; evenCell.style.color = ms.endBal < 0 ? 'var(--danger)' : ms.endBal > ms.startBal ? 'var(--accent)' : 'var(--muted2)'; }
+    const delta = ms.income - ms.spend;
+    const deltaCell = allTds[n + 5];
+    if (deltaCell) { deltaCell.textContent = delta !== 0 ? (delta > 0 ? '+' : '') + fmtNum(delta) : '—'; deltaCell.style.color = delta > 0 ? 'var(--accent)' : delta < 0 ? 'var(--danger)' : 'var(--warn)'; }
   });
 
   // recalc visible day row totals
@@ -1544,6 +1585,11 @@ function resetViewDate() {
     const v = cell ? parseFloat(cell.value) : NaN;
     inp.value = (!isNaN(v) && v !== 0) ? Math.round(v) : '';
     inp.className = (!isNaN(v) && v !== 0) ? 'has-value' : 'zero';
+  });
+  document.querySelectorAll('input[data-spend-date]').forEach(function(inp) {
+    const v = parseFloat(state.spends[inp.dataset.spendDate]) || 0;
+    inp.value = v > 0 ? Math.round(v) : '';
+    inp.className = v > 0 ? 'has-value' : '';
   });
   recalcAllTotals();
 }
@@ -1871,7 +1917,7 @@ function renderDay() {
     const ds = card.dataset.date;
     const manInp = card.querySelector('.entry-input[data-spend-date]');
     const manV = manInp ? (parseFloat(manInp.value) || 0) : 0;
-    if (manV > 0) state.spends[ds] = manV; else delete state.spends[ds];
+    setSpend(ds, manV);
     const hdr = card.querySelector('.day-header');
     let spHdr = hdr.querySelector('.day-spend-hdr');
     if (manV > 0) {
@@ -2063,7 +2109,7 @@ function fcCalc() {
 
   // write only future spends
   futureDays.forEach(function(ds) {
-    if (spendMap[ds]) state.spends[ds] = spendMap[ds];
+    if (spendMap[ds]) setSpend(ds, spendMap[ds]);
   });
   logAction();
   save();
@@ -2267,7 +2313,7 @@ function packData() {
 
   dv.setUint8(pos++, 0x49); // 'I'
   dv.setUint8(pos++, 0x54); // 'T'
-  dv.setUint8(pos++, 0x05); // version 5
+  dv.setUint8(pos++, 0x06); // version 6
   dv.setInt16(pos, state.year || new Date().getFullYear(), false); pos += 2;
 
   // sources (v4: +1 byte flags: bit0=noBalance)
@@ -2295,9 +2341,7 @@ function packData() {
     hist.slice(-15).forEach(function(h) {
       dv.setInt32(pos, Math.round(parseFloat(h.value)), false); pos += 4;
       const mins = Math.round(new Date(h.ts).getTime() / 60000);
-      dv.setUint8(pos++, (mins >> 16) & 0xFF);
-      dv.setUint8(pos++, (mins >> 8) & 0xFF);
-      dv.setUint8(pos++, mins & 0xFF);
+      dv.setUint32(pos, mins >>> 0, false); pos += 4;
     });
   });
 
@@ -2333,13 +2377,13 @@ function packData() {
   });
 
   const bytes = new Uint8Array(buf, 0, pos);
-  let hex = 'IT5';
+  let hex = 'IT6';
   bytes.forEach(function(b) { hex += b.toString(16).padStart(2,'0'); });
   return hex;
 }
 
 function unpackData(str) {
-  if (!str.startsWith('IT2') && !str.startsWith('IT3') && !str.startsWith('IT4') && !str.startsWith('IT5')) throw new Error('bad format');
+  if (!str.startsWith('IT2') && !str.startsWith('IT3') && !str.startsWith('IT4') && !str.startsWith('IT5') && !str.startsWith('IT6')) throw new Error('bad format');
   const hexStr = str.slice(3);
   const bytes = new Uint8Array(hexStr.length / 2);
   for (var i = 0; i < bytes.length; i++) {
@@ -2378,7 +2422,9 @@ function unpackData(str) {
     const history = [];
     for (var k = 0; k < histCount; k++) {
       const hval = String(dv.getInt32(pos, false)); pos += 4;
-      const mins = (dv.getUint8(pos) << 16) | (dv.getUint8(pos+1) << 8) | dv.getUint8(pos+2); pos += 3;
+      let mins;
+      if (ver >= 6) { mins = dv.getUint32(pos, false); pos += 4; }
+      else { mins = (dv.getUint8(pos) << 16) | (dv.getUint8(pos+1) << 8) | dv.getUint8(pos+2); pos += 3; }
       const ts = new Date(mins * 60000).toISOString();
       history.push({ value: hval, ts: ts });
     }
@@ -2462,6 +2508,7 @@ function doImport() {
       spends: newState.spends || state.spends,
       fc: (newState.fc && (newState.fc.balVal || newState.fc.balDate || newState.fc.limit || newState.fc.expenses.length)) ? newState.fc : state.fc
     });
+    initState();
     save();
     field.style.borderColor = 'var(--accent)';
     setTimeout(function() {
