@@ -1610,7 +1610,11 @@ function setViewDate(isoStr, preview) {
   document.querySelectorAll('tr:not([style*="display:none"]) input[data-date][data-src]').forEach(function(inp) {
     const key = inp.dataset.date + '|' + inp.dataset.src;
     const cell = state.cells[key];
-    if (!cell) { inp.value = ''; inp.className = 'zero'; return; }
+    if (!cell) {
+      inp.value = '';
+      inp.classList.contains('mdd-inp') ? inp.classList.remove('has-value') : (inp.className = 'zero');
+      return;
+    }
 
     let val = '';
     const hist = cell.history || [];
@@ -1622,14 +1626,18 @@ function setViewDate(isoStr, preview) {
     }
     const n = parseFloat(val);
     inp.value = (!isNaN(n) && n !== 0) ? Math.round(n) : '';
-    inp.className = (!isNaN(n) && n !== 0) ? 'has-value' : 'zero';
+    inp.classList.contains('mdd-inp')
+      ? inp.classList.toggle('has-value', !isNaN(n) && n !== 0)
+      : (inp.className = (!isNaN(n) && n !== 0) ? 'has-value' : 'zero');
   });
 
   // update spend inputs to historical values
   document.querySelectorAll('input[data-spend-date]').forEach(function(inp) {
     const v = getSpendAt(inp.dataset.spendDate, ts);
     inp.value = v > 0 ? Math.round(v) : '';
-    inp.className = v > 0 ? 'has-value' : '';
+    inp.classList.contains('mdd-inp')
+      ? inp.classList.toggle('has-value', v > 0)
+      : (inp.className = v > 0 ? 'has-value' : '');
   });
 
   document.getElementById('matrix').classList.add('history-mode');
@@ -1744,12 +1752,16 @@ function resetViewDate() {
     const cell = state.cells[key];
     const v = cell ? parseFloat(cell.value) : NaN;
     inp.value = (!isNaN(v) && v !== 0) ? Math.round(v) : '';
-    inp.className = (!isNaN(v) && v !== 0) ? 'has-value' : 'zero';
+    inp.classList.contains('mdd-inp')
+      ? inp.classList.toggle('has-value', !isNaN(v) && v !== 0)
+      : (inp.className = (!isNaN(v) && v !== 0) ? 'has-value' : 'zero');
   });
   document.querySelectorAll('input[data-spend-date]').forEach(function(inp) {
     const v = parseFloat(state.spends[inp.dataset.spendDate]) || 0;
     inp.value = v > 0 ? Math.round(v) : '';
-    inp.className = v > 0 ? 'has-value' : '';
+    inp.classList.contains('mdd-inp')
+      ? inp.classList.toggle('has-value', v > 0)
+      : (inp.className = v > 0 ? 'has-value' : '');
   });
   recalcAllTotals();
 }
