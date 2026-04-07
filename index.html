@@ -720,7 +720,21 @@ function load() {
 }
 
 function save() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch(e) {}
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  } catch(e) {
+    var t = document.getElementById('save-err-toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'save-err-toast';
+      t.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--danger);color:#fff;font-family:var(--mono);font-size:11px;padding:8px 18px;border-radius:8px;z-index:999;pointer-events:none;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,0.4);';
+      document.body.appendChild(t);
+    }
+    t.textContent = '⚠ не сохранено — хранилище переполнено';
+    t.style.opacity = '1';
+    clearTimeout(t._tid);
+    t._tid = setTimeout(function() { t.style.opacity = '0'; }, 4000);
+  }
 }
 
 function logAction() {
@@ -1015,9 +1029,6 @@ function toggleDayDetail(e, td) {
     const total = parseFloat(spInp.value) || 0;
     if (total <= 0) { errRow.style.display = 'none'; return; }
     let bigSum = 0;
-    spendCol.querySelectorAll('input[data-exp-idx]').forEach(function(i) { bigSum += parseFloat(i.value) || 0; });
-    // also sum from dayExps using current fc values
-    bigSum = 0;
     dayExps.forEach(function(e) {
       const inp2 = spendCol.querySelector('input[data-exp-idx="' + e.expIdx + '"]');
       bigSum += inp2 ? (parseFloat(inp2.value) || 0) : e.sum;
@@ -2480,6 +2491,10 @@ function packData() {
   size += 11; // fc header: balDate(2)+balVal(4)+limit(4)+expCount(1)
   fcExpenses.forEach(function(e, i) { size += 8 + expLabels[i].length; });
   size += 1 + fcIncomes.length * 8; // incomeCount(1) + srcIdx(1)+date(2)+sum(4)+freq(1) each
+  const overrideEntries = Object.keys(state.expOverrides || {}).map(function(k) {
+    const p = k.split('|'); return { ds: p[0], idx: parseInt(p[1]) || 0, v: parseInt(state.expOverrides[k]) || 0 };
+  }).filter(function(e) { return e.ds && !isNaN(e.idx); });
+  size += 2 + overrideEntries.length * 7; // count(2) + day16(2)+idx(1)+val(4) each
   size += 4; // safety
 
   const buf = new ArrayBuffer(size + 512);
@@ -2488,7 +2503,7 @@ function packData() {
 
   dv.setUint8(pos++, 0x49); // 'I'
   dv.setUint8(pos++, 0x54); // 'T'
-  dv.setUint8(pos++, 0x06); // version 6
+  dv.setUint8(pos++, 0x07); // version 7
   dv.setInt16(pos, state.year || new Date().getFullYear(), false); pos += 2;
 
   // sources (v4: +1 byte flags: bit0=noBalance)
@@ -2551,14 +2566,22 @@ function packData() {
     dv.setUint8(pos++, Math.max(0, freqVals.indexOf(e.freq || 'monthly')));
   });
 
+  // expOverrides (IT7)
+  dv.setUint16(pos, overrideEntries.length, false); pos += 2;
+  overrideEntries.forEach(function(e) {
+    dv.setInt16(pos, dateToDay16(e.ds), false); pos += 2;
+    dv.setUint8(pos++, e.idx);
+    dv.setInt32(pos, e.v, false); pos += 4;
+  });
+
   const bytes = new Uint8Array(buf, 0, pos);
-  let hex = 'IT6';
+  let hex = 'IT7';
   bytes.forEach(function(b) { hex += b.toString(16).padStart(2,'0'); });
   return hex;
 }
 
 function unpackData(str) {
-  if (!str.startsWith('IT2') && !str.startsWith('IT3') && !str.startsWith('IT4') && !str.startsWith('IT5') && !str.startsWith('IT6')) throw new Error('bad format');
+  if (!str.startsWith('IT2') && !str.startsWith('IT3') && !str.startsWith('IT4') && !str.startsWith('IT5') && !str.startsWith('IT6') && !str.startsWith('IT7')) throw new Error('bad format');
   const hexStr = str.slice(3);
   const bytes = new Uint8Array(hexStr.length / 2);
   for (var i = 0; i < bytes.length; i++) {
@@ -2648,7 +2671,18 @@ function unpackData(str) {
     }
   }
 
-  return { sources: sources, cells: cells, year: year, spends: spends, fc: fc };
+  const expOverrides = {};
+  if (ver >= 7) {
+    const ovCount = dv.getUint16(pos, false); pos += 2;
+    for (var q = 0; q < ovCount; q++) {
+      const ovDs = day16ToDate(dv.getInt16(pos, false)); pos += 2;
+      const ovIdx = dv.getUint8(pos++);
+      const ovVal = dv.getInt32(pos, false); pos += 4;
+      if (ovDs) expOverrides[ovDs + '|' + ovIdx] = String(ovVal);
+    }
+  }
+
+  return { sources: sources, cells: cells, year: year, spends: spends, fc: fc, expOverrides: expOverrides };
 }
 
 function openSettings() {
