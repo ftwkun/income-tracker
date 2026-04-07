@@ -542,6 +542,21 @@ td.col-spend { padding: 0; width: 64px; min-width: 64px; }
 .col-spend input:focus { background: rgba(248,113,113,0.08); color: var(--danger); }
 .col-spend input.has-value { color: rgba(248,113,113,0.8); }
 td.col-income-total, td.col-evening { padding: 0 6px; text-align: right; font-family: var(--mono); font-size: 11px; width: 64px; min-width: 64px; white-space: nowrap; }
+/* ── Debug button & popup ── */
+#btn-debug { background: none; border: 1px solid var(--border2); border-radius: 6px; padding: 5px 14px; color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; cursor: pointer; opacity: 0.5; }
+#btn-debug:hover { opacity: 1; color: var(--muted2); }
+#debug-popup { position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,0.8); display: none; align-items: center; justify-content: center; }
+#debug-popup.open { display: flex; }
+#debug-inner { background: var(--surface); border-radius: 12px; padding: 16px; min-width: 300px; max-width: 94vw; max-height: 80vh; display: flex; flex-direction: column; gap: 0; }
+#debug-inner h3 { font-family: var(--mono); font-size: 11px; color: var(--muted2); margin-bottom: 10px; letter-spacing: 0.08em; text-transform: uppercase; flex-shrink: 0; }
+#debug-list { overflow-y: auto; flex: 1; }
+#btn-close-debug { margin-top: 12px; width: 100%; background: none; border: 1px solid var(--border2); border-radius: 6px; padding: 8px; color: var(--muted2); font-family: var(--mono); font-size: 11px; cursor: pointer; flex-shrink: 0; }
+.dbg-row { display: grid; grid-template-columns: 80px 56px 56px 56px 1fr; gap: 4px; padding: 4px 0; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 11px; align-items: center; }
+.dbg-row:last-child { border-bottom: none; }
+.dbg-hdr { color: var(--muted); font-size: 9px; letter-spacing: 0.06em; }
+.dbg-date { color: var(--muted2); }
+.dbg-num { text-align: right; color: var(--muted); }
+.dbg-err { text-align: right; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -655,6 +670,15 @@ td.col-income-total, td.col-evening { padding: 0 6px; text-align: right; font-fa
   <button class="move-btn dn" id="move-dn" onmousedown="event.preventDefault()" onclick="moveCell(1)">↓</button>
 </div>
 
+<!-- Debug popup -->
+<div id="debug-popup" onclick="if(event.target===this)closeDebug()">
+  <div id="debug-inner">
+    <h3>ошибки трат</h3>
+    <div id="debug-list"></div>
+    <button id="btn-close-debug" onclick="closeDebug()">закрыть</button>
+  </div>
+</div>
+
 <!-- History popup -->
 <div id="hist-popup" onclick="if(event.target===this)closeHist()">
   <div id="hist-inner">
@@ -679,6 +703,7 @@ function initState() {
   if (!state.fc.incomes) state.fc.incomes = [];
   if (state.sourcesCollapsed === undefined) state.sourcesCollapsed = true;
   if (!state.actionLog) state.actionLog = [];
+  if (!state.expOverrides) state.expOverrides = {};
   if (!state.collapsedMonths) {
     state.collapsedMonths = {};
     const cur = new Date().getMonth();
@@ -702,6 +727,14 @@ function logAction() {
   const ds = today();
   if (!state.actionLog) state.actionLog = [];
   if (!state.actionLog.includes(ds)) state.actionLog.push(ds);
+}
+
+function calcAutoSpend(ds) {
+  const limitV = parseFloat(state.fc && state.fc.limit) || 0;
+  if (limitV <= 0) return 0;
+  const bigSum = (buildDayExpensesMap([ds])[ds] || [])
+    .reduce(function(a, e) { return a + (parseFloat(e.sum) || 0); }, 0);
+  return limitV + bigSum;
 }
 
 function setSpend(ds, rawValue) {
@@ -935,9 +968,29 @@ function toggleDayDetail(e, td) {
     eInp.addEventListener('keydown', function(ev) { if (ev.key === 'Enter') this.blur(); });
     eInp.addEventListener('change', function() {
       const idx = parseInt(this.dataset.expIdx);
+      // старое значение для этого дня (переопределение или глобальное)
+      const overrideKey = ds + '|' + idx;
+      const prevOv = (state.expOverrides || {})[overrideKey];
+      const oldVal = prevOv !== undefined ? (parseFloat(prevOv) || 0) : (parseFloat(state.fc.expenses[idx].sum) || 0);
       const v = parseFloat(this.value);
-      state.fc.expenses[idx].sum = (!isNaN(v) && v > 0) ? String(Math.round(v)) : '';
-      this.className = 'entry-input spend mdd-inp' + ((!isNaN(v) && v > 0) ? ' has-value' : '');
+      const newVal = (!isNaN(v) && v > 0) ? Math.round(v) : 0;
+      // сохраняем только для этого дня — глобальный расход не трогаем
+      if (!state.expOverrides) state.expOverrides = {};
+      if (newVal !== (parseFloat(state.fc.expenses[idx].sum) || 0)) {
+        state.expOverrides[overrideKey] = String(newVal);
+      } else {
+        delete state.expOverrides[overrideKey]; // убираем переопределение если совпадает с глобальным
+      }
+      this.className = 'entry-input spend mdd-inp' + (newVal > 0 ? ' has-value' : '');
+      // корректируем сумму трат: маленькая часть не меняется, только bigSum сдвигается на дельту
+      const diff = newVal - oldVal;
+      const currentTotal = parseFloat(spInp.value) || 0;
+      const newTotal = Math.max(0, currentTotal + diff);
+      spInp.value = newTotal > 0 ? Math.round(newTotal) : '';
+      spInp.className = 'entry-input spend mdd-inp' + (newTotal > 0 ? ' has-value' : '');
+      setSpend(ds, newTotal);
+      const mx = document.querySelector('input[data-spend-date="' + ds + '"]:not(.mdd-inp)');
+      if (mx) { mx.value = newTotal > 0 ? Math.round(newTotal) : ''; mx.className = newTotal > 0 ? 'has-value' : ''; }
       updateErrRow();
       save(); recalcAllTotals();
     });
@@ -1001,11 +1054,16 @@ function toggleDayDetail(e, td) {
   spInp.addEventListener('keydown', function(ev) { if (ev.key === 'Enter') this.blur(); });
   spInp.addEventListener('input', updateErrRow);
   spInp.addEventListener('change', function() {
-    const v = parseFloat(this.value);
+    let v = parseFloat(this.value);
+    if (isNaN(v) || v <= 0) {
+      const auto = calcAutoSpend(ds);
+      if (auto > 0) { v = auto; this.value = Math.round(auto); }
+    }
     setSpend(ds, v);
     this.className = 'entry-input spend mdd-inp' + ((!isNaN(v) && v > 0) ? ' has-value' : '');
     const mx = document.querySelector('input[data-spend-date="' + ds + '"]:not(.mdd-inp)');
     if (mx) { mx.value = (!isNaN(v) && v > 0) ? Math.round(v) : ''; mx.className = (!isNaN(v) && v > 0) ? 'has-value' : ''; }
+    updateErrRow();
     save(); recalcAllTotals();
   });
   spRow.appendChild(spLbl); spRow.appendChild(spInp);
@@ -1209,7 +1267,46 @@ function renderMatrix() {
   // дельта (col-row-total, sticky)
   const yearDeltaColor = yearDelta > 0 ? 'var(--accent)' : yearDelta < 0 ? 'var(--danger)' : 'var(--warn)';
   html += '<td class="col-row-total" style="' + YS + 'font-size:12px;color:' + yearDeltaColor + ';">' + (yearDelta !== 0 ? (yearDelta > 0 ? '+' : '') + fmtNum(yearDelta) : '—') + '</td>';
-  html += '</tr></tbody></table>';
+  html += '</tr>';
+
+  // ── строка ошибок ──────────────────────────────────────────────
+  (function() {
+    const limitV2 = parseFloat(state.fc && state.fc.limit) || 0;
+    if (limitV2 <= 0) return;
+    const dayExpMap2 = buildDayExpensesMap(days);
+    let errPlus = 0, errMinus = 0;
+    days.forEach(function(ds) {
+      const sp = parseFloat(state.spends[ds]) || 0;
+      if (sp <= 0) return;
+      const bigSum = (dayExpMap2[ds] || []).reduce(function(a, e) { return a + (parseFloat(e.sum) || 0); }, 0);
+      const err = limitV2 - (sp - bigSum);
+      if (err > 0) errPlus += err; else if (err < 0) errMinus += err;
+    });
+    if (errPlus === 0 && errMinus === 0) return;
+    const errNet = errPlus + errMinus;
+    const ES = 'font-family:var(--mono);font-size:10px;font-weight:600;text-align:right;padding:2px 10px;white-space:nowrap;vertical-align:middle;';
+    const lbl = function(t) { return '<div style="font-size:8px;font-weight:400;color:var(--muted);letter-spacing:0.06em;line-height:1.2;">' + t + '</div>'; };
+    html += '<tr class="col-total" style="opacity:0.65;">';
+    html += '<td style="color:var(--muted);font-size:9px;letter-spacing:0.08em;padding:4px 8px;font-family:var(--mono);">ΔТ</td>';
+    // spend col: перебор
+    html += '<td class="col-spend" style="' + ES + 'color:' + (errMinus < 0 ? 'var(--danger)' : 'var(--muted)') + ';">' +
+      (errMinus < 0 ? '−' + fmtNum(Math.abs(errMinus)) + lbl('пере') : '—') + '</td>';
+    // source cols: пусто
+    sources.forEach(function() { html += '<td></td>'; });
+    // income col: экономия
+    html += '<td class="col-income-total" style="' + ES + 'color:' + (errPlus > 0 ? 'var(--accent)' : 'var(--muted)') + ';">' +
+      (errPlus > 0 ? '+' + fmtNum(errPlus) + lbl('экон') : '—') + '</td>';
+    // баланс: пусто
+    html += '<td class="col-evening"></td>';
+    // delta col: нетто
+    const nc = errNet > 0 ? 'var(--accent)' : errNet < 0 ? 'var(--danger)' : 'var(--muted)';
+    html += '<td class="col-row-total" style="' + ES + 'color:' + nc + ';">' +
+      (errNet !== 0 ? (errNet > 0 ? '+' : '−') + fmtNum(Math.abs(errNet)) + lbl('нетто') : '—') + '</td>';
+    html += '</tr>';
+  })();
+
+  html += '</tbody></table>';
+  html += '<div style="padding:16px 0 32px;text-align:center;"><button id="btn-debug" onclick="showDebug()">debug</button></div>';
   wrap.innerHTML = html;
 
   // restore collapsed-sources state (default: collapsed)
@@ -1278,12 +1375,38 @@ function renderMatrix() {
   wrap.querySelectorAll('input[data-spend-date]').forEach(function(inp) {
     inp.addEventListener('change', function() {
       const ds = this.dataset.spendDate;
+      let v = parseFloat(this.value);
+      if (isNaN(v) || v === 0) {
+        const auto = calcAutoSpend(ds);
+        if (auto > 0) { v = auto; this.value = Math.round(auto); }
+      }
+      setSpend(ds, v);
+      this.className = (!isNaN(v) && v !== 0) ? 'has-value' : '';
+      save(); recalcAllTotals();
+    });
+    inp.addEventListener('focus', function() { this.select(); });
+    inp.addEventListener('keydown', function(ev) {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      // сохранить текущее значение
+      const ds = this.dataset.spendDate;
       const v = parseFloat(this.value);
       setSpend(ds, v);
       this.className = (!isNaN(v) && v !== 0) ? 'has-value' : '';
-      save();
+      save(); recalcAllTotals();
+      // найти следующий видимый spend-input
+      const all = Array.from(wrap.querySelectorAll('input[data-spend-date]'));
+      const idx = all.indexOf(this);
+      for (var i = idx + 1; i < all.length; i++) {
+        const tr = all[i].closest('tr');
+        if (tr && tr.style.display !== 'none') {
+          all[i].focus();
+          all[i].select();
+          all[i].scrollIntoView({ block: 'nearest' });
+          break;
+        }
+      }
     });
-    inp.addEventListener('focus', function() { this.select(); });
   });
   wrap.querySelectorAll('tr.past .m-cell input').forEach(function(inp) {
     const cell = state.cells[inp.dataset.date + '|' + inp.dataset.src];
@@ -1796,25 +1919,28 @@ document.addEventListener('click', function(e) {
 function buildDayExpensesMap(days) {
   const map = {};
   const expenses = (state.fc && state.fc.expenses) || [];
+  const overrides = state.expOverrides || {};
   const startDs = days[0], endDs = days[days.length - 1];
   expenses.forEach(function(r, expIdx) {
-    const s = parseFloat(r.sum); if (isNaN(s) || s === 0) return;
+    const globalSum = parseFloat(r.sum); if (isNaN(globalSum) || globalSum === 0) return;
     const label = r.label || '';
+    function addEntry(ds2) {
+      const key = ds2 + '|' + expIdx;
+      const ov = overrides[key];
+      const s = ov !== undefined ? (parseFloat(ov) || 0) : globalSum;
+      if (s <= 0) return;
+      if (!map[ds2]) map[ds2] = [];
+      map[ds2].push({ label: label, sum: s, expIdx: expIdx });
+    }
     if (r.freq === 'once') {
-      if (r.date >= startDs && r.date <= endDs) {
-        if (!map[r.date]) map[r.date] = [];
-        map[r.date].push({ label: label, sum: s, expIdx: expIdx });
-      }
+      if (r.date >= startDs && r.date <= endDs) addEntry(r.date);
       return;
     }
     const dt = parseLocalDate(r.date);
     while (true) {
       const ds = localDateStr(dt);
       if (ds > endDs) break;
-      if (ds >= startDs) {
-        if (!map[ds]) map[ds] = [];
-        map[ds].push({ label: label, sum: s, expIdx: expIdx });
-      }
+      if (ds >= startDs) addEntry(ds);
       if (r.freq === 'monthly') dt.setMonth(dt.getMonth() + 1);
       else if (r.freq === 'yearly') dt.setFullYear(dt.getFullYear() + 1);
       else if (r.freq === 'weekly') dt.setDate(dt.getDate() + 7);
@@ -2661,6 +2787,47 @@ function showHist(date, srcId) {
     }).join('');
   }
   document.getElementById('hist-popup').classList.add('open');
+}
+
+function showDebug() {
+  const limitV = parseFloat(state.fc && state.fc.limit) || 0;
+  const days = daysInYear(state.year);
+  const dayExpMap = buildDayExpensesMap(days);
+  const rows = [];
+  days.forEach(function(ds) {
+    const sp = parseFloat(state.spends[ds]) || 0;
+    if (sp <= 0) return;
+    const bigSum = (dayExpMap[ds] || []).reduce(function(a, e) { return a + (parseFloat(e.sum) || 0); }, 0);
+    const err = limitV > 0 ? limitV - (sp - bigSum) : null;
+    rows.push({ ds: ds, sp: sp, bigSum: bigSum, err: err });
+  });
+
+  const list = document.getElementById('debug-list');
+  if (!rows.length) {
+    list.innerHTML = '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:12px 0;">нет данных о тратах</div>';
+  } else {
+    let html = '<div class="dbg-row dbg-hdr"><span>дата</span><span style="text-align:right">траты</span><span style="text-align:right">ТРТ</span><span style="text-align:right">лимит</span><span style="text-align:right">ошибка</span></div>';
+    rows.forEach(function(r) {
+      const errStr = r.err === null ? '—'
+        : r.err === 0 ? '0'
+        : r.err > 0 ? '+' + fmtNum(r.err)
+        : '−' + fmtNum(Math.abs(r.err));
+      const errColor = r.err === null || r.err === 0 ? 'var(--muted)'
+        : r.err > 0 ? 'var(--accent)' : 'var(--danger)';
+      html += '<div class="dbg-row">'
+        + '<span class="dbg-date">' + r.ds + '</span>'
+        + '<span class="dbg-num">' + fmtNum(r.sp) + '</span>'
+        + '<span class="dbg-num">' + (r.bigSum > 0 ? fmtNum(r.bigSum) : '—') + '</span>'
+        + '<span class="dbg-num">' + (limitV > 0 ? fmtNum(limitV) : '—') + '</span>'
+        + '<span class="dbg-err" style="color:' + errColor + '">' + errStr + '</span>'
+        + '</div>';
+    });
+    list.innerHTML = html;
+  }
+  document.getElementById('debug-popup').classList.add('open');
+}
+function closeDebug() {
+  document.getElementById('debug-popup').classList.remove('open');
 }
 
 function closeHist() {
