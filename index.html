@@ -324,8 +324,11 @@ tr.today.weekend td { background: rgba(74,222,128,0.08) !important; }
 
 /* ── Matrix day detail row ── */
 tr.matrix-day-detail > td { padding: 8px 14px 12px; background: rgba(30,41,59,0.6); border-bottom: 1px solid var(--border2); }
-.mdd-wrap { display: flex; gap: 24px; align-items: flex-start; }
-.mdd-col { display: flex; flex-direction: column; gap: 0; min-width: 140px; }
+.mdd-wrap { display: flex; gap: 12px; align-items: flex-start; }
+.mdd-col { display: flex; flex-direction: column; gap: 0; }
+.mdd-col-inc { flex: 0 0 auto; min-width: 0; }
+.mdd-col-inc .entry-input { width: 62px; flex: 0 0 62px; text-align: right; }
+.mdd-col-spend { flex: 1; min-width: 100px; }
 .mdd-col-title { font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
 .mdd-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--border); }
 .mdd-row:last-child { border-bottom: none; }
@@ -855,7 +858,7 @@ function toggleDayDetail(e, td) {
 
   // ── Колонка поступлений ──
   const incCol = document.createElement('div');
-  incCol.className = 'mdd-col';
+  incCol.className = 'mdd-col mdd-col-inc';
   const incTitle = document.createElement('div');
   incTitle.className = 'mdd-col-title';
   incTitle.textContent = 'поступления';
@@ -892,14 +895,30 @@ function toggleDayDetail(e, td) {
 
   // ── Колонка трат ──
   const spendCol = document.createElement('div');
-  spendCol.className = 'mdd-col';
+  spendCol.className = 'mdd-col mdd-col-spend';
   const spendTitle = document.createElement('div');
   spendTitle.className = 'mdd-col-title';
   spendTitle.textContent = 'траты';
   spendCol.appendChild(spendTitle);
 
-  // ТРТ из fc.expenses
+  const limitV = parseFloat(state.fc && state.fc.limit) || 0;
   const dayExps = buildDayExpensesMap(daysInYear(state.year))[ds] || [];
+
+  // лимит (read-only)
+  if (limitV > 0) {
+    const limRow = document.createElement('div');
+    limRow.className = 'mdd-row';
+    const limLbl = document.createElement('span');
+    limLbl.style.cssText = 'flex:1;font-family:var(--mono);font-size:10px;color:var(--warn);';
+    limLbl.textContent = 'лимит';
+    const limVal = document.createElement('span');
+    limVal.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;color:rgba(251,191,36,0.85);';
+    limVal.textContent = fmtNum(limitV);
+    limRow.appendChild(limLbl); limRow.appendChild(limVal);
+    spendCol.appendChild(limRow);
+  }
+
+  // большие траты (ТРТ, editable)
   dayExps.forEach(function(e) {
     const eRow = document.createElement('div');
     eRow.className = 'mdd-row';
@@ -919,31 +938,56 @@ function toggleDayDetail(e, td) {
       const v = parseFloat(this.value);
       state.fc.expenses[idx].sum = (!isNaN(v) && v > 0) ? String(Math.round(v)) : '';
       this.className = 'entry-input spend mdd-inp' + ((!isNaN(v) && v > 0) ? ' has-value' : '');
+      updateErrRow();
       save(); recalcAllTotals();
     });
     eRow.appendChild(eLbl); eRow.appendChild(eInp);
     spendCol.appendChild(eRow);
   });
 
-  // лимит (read-only)
-  const limitV = parseFloat(state.fc && state.fc.limit) || 0;
-  if (limitV > 0) {
-    const limRow = document.createElement('div');
-    limRow.className = 'mdd-row';
-    const limLbl = document.createElement('span');
-    limLbl.style.cssText = 'flex:1;font-family:var(--mono);font-size:10px;color:var(--warn);';
-    limLbl.textContent = 'лимит';
-    const limVal = document.createElement('span');
-    limVal.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;color:rgba(251,191,36,0.85);';
-    limVal.textContent = '−' + fmtNum(limitV);
-    limRow.appendChild(limLbl); limRow.appendChild(limVal);
-    spendCol.appendChild(limRow);
+  // ошибка (пересчитывается динамически)
+  const errRow = document.createElement('div');
+  errRow.className = 'mdd-row';
+  errRow.style.cssText = 'border-top:1px solid var(--border2);margin-top:2px;padding-top:4px;';
+  const errLbl = document.createElement('span');
+  errLbl.style.cssText = 'flex:1;font-family:var(--mono);font-size:10px;color:var(--muted);';
+  errLbl.textContent = 'ошибка';
+  const errVal = document.createElement('span');
+  errVal.style.cssText = 'font-family:var(--mono);font-size:12px;font-weight:600;';
+  errRow.appendChild(errLbl); errRow.appendChild(errVal);
+  errRow.style.display = 'none';
+  spendCol.appendChild(errRow);
+
+  function updateErrRow() {
+    const total = parseFloat(spInp.value) || 0;
+    if (total <= 0) { errRow.style.display = 'none'; return; }
+    let bigSum = 0;
+    spendCol.querySelectorAll('input[data-exp-idx]').forEach(function(i) { bigSum += parseFloat(i.value) || 0; });
+    // also sum from dayExps using current fc values
+    bigSum = 0;
+    dayExps.forEach(function(e) {
+      const inp2 = spendCol.querySelector('input[data-exp-idx="' + e.expIdx + '"]');
+      bigSum += inp2 ? (parseFloat(inp2.value) || 0) : e.sum;
+    });
+    const err = limitV - (total - bigSum); // positive = saved, negative = overspent
+    errRow.style.display = '';
+    if (err === 0) {
+      errVal.textContent = '0';
+      errVal.style.color = 'var(--muted)';
+    } else if (err > 0) {
+      errVal.textContent = '+' + fmtNum(err);
+      errVal.style.color = 'var(--accent)';
+    } else {
+      errVal.textContent = '−' + fmtNum(Math.abs(err));
+      errVal.style.color = 'var(--danger)';
+    }
   }
 
   // сумма трат — ручной ввод
   const spendV = parseFloat(state.spends[ds]) || 0;
   const spRow = document.createElement('div');
   spRow.className = 'mdd-row';
+  spRow.style.cssText = 'border-top:1px solid var(--border2);margin-top:2px;padding-top:4px;';
   const spLbl = document.createElement('span');
   spLbl.style.cssText = 'flex:1;font-family:var(--mono);font-size:10px;color:var(--muted);';
   spLbl.textContent = 'сумма трат';
@@ -955,6 +999,7 @@ function toggleDayDetail(e, td) {
   spInp.placeholder = '—';
   spInp.addEventListener('focus', function() { this.select(); });
   spInp.addEventListener('keydown', function(ev) { if (ev.key === 'Enter') this.blur(); });
+  spInp.addEventListener('input', updateErrRow);
   spInp.addEventListener('change', function() {
     const v = parseFloat(this.value);
     setSpend(ds, v);
@@ -965,6 +1010,9 @@ function toggleDayDetail(e, td) {
   });
   spRow.appendChild(spLbl); spRow.appendChild(spInp);
   spendCol.appendChild(spRow);
+
+  // показать ошибку если уже есть сумма
+  updateErrRow();
 
   wrap.appendChild(incCol);
   wrap.appendChild(spendCol);
