@@ -2805,6 +2805,8 @@ function showDebug() {
   const limitV = parseFloat(state.fc && state.fc.limit) || 0;
   const days = daysInYear(state.year);
   const dayExpMap = buildDayExpensesMap(days);
+
+  // ── ошибки ──
   const rows = [];
   days.forEach(function(ds) {
     const sp = parseFloat(state.spends[ds]) || 0;
@@ -2814,28 +2816,75 @@ function showDebug() {
     rows.push({ ds: ds, sp: sp, bigSum: bigSum, err: err });
   });
 
-  const list = document.getElementById('debug-list');
+  // ── события таймлайна (откуда берутся синие точки) ──
+  const events = []; // { dayStr, time, what }
+  Object.keys(state.cells).forEach(function(key) {
+    const cell = state.cells[key];
+    if (!cell || !cell.history) return;
+    const parts = key.split('|');
+    const datePart = parts[0];
+    const src = state.sources.find(function(s) { return s.id === parts[1]; });
+    cell.history.forEach(function(h) {
+      if (!h.ts) return;
+      const d = new Date(h.ts);
+      if (isNaN(d)) return;
+      events.push({ ts: d.getTime(), dayStr: h.ts.slice(0,10), time: h.ts.slice(11,16), what: 'доход ' + (src ? src.code : parts[1]) + ' → ' + datePart, val: h.value });
+    });
+  });
+  Object.keys(state.spendHistory || {}).forEach(function(ds) {
+    (state.spendHistory[ds] || []).forEach(function(h) {
+      if (!h.ts) return;
+      const d = new Date(h.ts);
+      if (isNaN(d)) return;
+      events.push({ ts: d.getTime(), dayStr: h.ts.slice(0,10), time: h.ts.slice(11,16), what: 'трат ' + ds, val: h.value });
+    });
+  });
+  (state.actionLog || []).forEach(function(ds) {
+    events.push({ ts: new Date(ds + 'T23:59:59').getTime(), dayStr: ds, time: '23:59', what: 'расчёт прогноза', val: '' });
+  });
+  events.sort(function(a, b) { return b.ts - a.ts; }); // свежие сверху
+
+  const MS = 'font-family:var(--mono);font-size:10px;';
+  const MH = 'font-size:9px;color:var(--muted);letter-spacing:0.06em;text-transform:uppercase;';
+
+  let html = '';
+
+  // блок ошибок
+  html += '<div style="' + MH + 'padding:4px 0 6px;">ошибки трат</div>';
   if (!rows.length) {
-    list.innerHTML = '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:12px 0;">нет данных о тратах</div>';
+    html += '<div style="' + MS + 'color:var(--muted);padding:4px 0 10px;">нет данных</div>';
   } else {
-    let html = '<div class="dbg-row dbg-hdr"><span>дата</span><span style="text-align:right">траты</span><span style="text-align:right">ТРТ</span><span style="text-align:right">лимит</span><span style="text-align:right">ошибка</span></div>';
+    html += '<div class="dbg-row dbg-hdr"><span>дата</span><span style="text-align:right">траты</span><span style="text-align:right">ТРТ</span><span style="text-align:right">лимит</span><span style="text-align:right">ошибка</span></div>';
     rows.forEach(function(r) {
-      const errStr = r.err === null ? '—'
-        : r.err === 0 ? '0'
-        : r.err > 0 ? '+' + fmtNum(r.err)
-        : '−' + fmtNum(Math.abs(r.err));
-      const errColor = r.err === null || r.err === 0 ? 'var(--muted)'
-        : r.err > 0 ? 'var(--accent)' : 'var(--danger)';
-      html += '<div class="dbg-row">'
-        + '<span class="dbg-date">' + r.ds + '</span>'
+      const errStr = r.err === null ? '—' : r.err === 0 ? '0' : r.err > 0 ? '+' + fmtNum(r.err) : '−' + fmtNum(Math.abs(r.err));
+      const errColor = r.err === null || r.err === 0 ? 'var(--muted)' : r.err > 0 ? 'var(--accent)' : 'var(--danger)';
+      html += '<div class="dbg-row"><span class="dbg-date">' + r.ds + '</span>'
         + '<span class="dbg-num">' + fmtNum(r.sp) + '</span>'
         + '<span class="dbg-num">' + (r.bigSum > 0 ? fmtNum(r.bigSum) : '—') + '</span>'
         + '<span class="dbg-num">' + (limitV > 0 ? fmtNum(limitV) : '—') + '</span>'
-        + '<span class="dbg-err" style="color:' + errColor + '">' + errStr + '</span>'
+        + '<span class="dbg-err" style="color:' + errColor + '">' + errStr + '</span></div>';
+    });
+  }
+
+  // блок событий таймлайна
+  html += '<div style="' + MH + 'padding:12px 0 6px;border-top:1px solid var(--border2);margin-top:8px;">синие точки — история правок</div>';
+  if (!events.length) {
+    html += '<div style="' + MS + 'color:var(--muted);">нет событий</div>';
+  } else {
+    const show = events.slice(0, 60);
+    show.forEach(function(ev) {
+      html += '<div style="display:flex;gap:8px;padding:3px 0;border-bottom:1px solid var(--border);' + MS + 'align-items:baseline;">'
+        + '<span style="color:var(--accent2);flex-shrink:0;">' + ev.dayStr + '</span>'
+        + '<span style="color:var(--muted);flex-shrink:0;">' + ev.time + '</span>'
+        + '<span style="color:var(--muted2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + ev.what + '</span>'
+        + (ev.val !== '' ? '<span style="color:var(--muted);flex-shrink:0;">' + (ev.val || '—') + '</span>' : '')
         + '</div>';
     });
-    list.innerHTML = html;
+    if (events.length > 60) html += '<div style="' + MS + 'color:var(--muted);padding:4px 0;">... ещё ' + (events.length - 60) + '</div>';
   }
+
+  const list = document.getElementById('debug-list');
+  list.innerHTML = html;
   document.getElementById('debug-popup').classList.add('open');
 }
 function closeDebug() {
