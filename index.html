@@ -437,11 +437,10 @@ tr.matrix-day-detail > td { padding: 8px 14px 12px; background: rgba(30,41,59,0.
 #matrix.sources-collapsed .m-cell { display: none; }
 #matrix:not(.sources-collapsed) thead th.col-spend,
 #matrix:not(.sources-collapsed) thead th.col-income-total,
-#matrix:not(.sources-collapsed) thead th.col-morning,
 #matrix:not(.sources-collapsed) thead th.col-evening { display: none; }
-#matrix.sources-collapsed thead th:not(:first-child):not(.col-spend):not(.col-income-total):not(.col-morning):not(.col-evening):not(.col-row-total) { display: none; }
-#matrix.sources-collapsed tr.month-total-row td:not(:first-child):not(.col-row-total):not(.col-spend):not(.col-income-total):not(.col-morning):not(.col-evening) { display: none; }
-#matrix.sources-collapsed tr.col-total td:not(:first-child):not(.col-row-total):not(.col-spend):not(.col-income-total):not(.col-morning):not(.col-evening) { display: none; }
+#matrix.sources-collapsed thead th:not(:first-child):not(.col-spend):not(.col-income-total):not(.col-evening):not(.col-row-total) { display: none; }
+#matrix.sources-collapsed tr.month-total-row td:not(:first-child):not(.col-row-total):not(.col-spend):not(.col-income-total):not(.col-evening) { display: none; }
+#matrix.sources-collapsed tr.col-total td:not(:first-child):not(.col-row-total):not(.col-spend):not(.col-income-total):not(.col-evening) { display: none; }
 
 /* ── History popup ── */
 #hist-popup {
@@ -528,19 +527,18 @@ input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
 #matrix tr.month-total-row td.col-row-total { background: rgba(34,211,238,0.04) !important; }
 #matrix tr.col-total td.col-row-total { background: var(--surface) !important; }
 #matrix tr.weekend td.col-row-total { background: rgba(251,191,36,0.04) !important; }
-.col-spend, .col-income-total, .col-morning, .col-evening { display: none; }
+.col-spend, .col-income-total, .col-evening { display: none; }
 /* mo-sum headers always hidden */
 thead th.mo-sum { display: none; }
 /* collapsed mode: show day-row extra cols + hide sources */
 #matrix.sources-collapsed .col-spend,
 #matrix.sources-collapsed .col-income-total,
-#matrix.sources-collapsed .col-morning,
 #matrix.sources-collapsed .col-evening { display: table-cell; }
 td.col-spend { padding: 0; width: 64px; min-width: 64px; }
 .col-spend input { width: 64px; height: 26px; background: none; border: none; outline: none; font-family: var(--mono); font-size: 11px; color: rgba(248,113,113,0.7); text-align: right; padding: 0 6px; }
 .col-spend input:focus { background: rgba(248,113,113,0.08); color: var(--danger); }
 .col-spend input.has-value { color: rgba(248,113,113,0.8); }
-td.col-income-total, td.col-morning, td.col-evening { padding: 0 6px; text-align: right; font-family: var(--mono); font-size: 11px; width: 64px; min-width: 64px; white-space: nowrap; }
+td.col-income-total, td.col-evening { padding: 0 6px; text-align: right; font-family: var(--mono); font-size: 11px; width: 64px; min-width: 64px; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -1001,8 +999,7 @@ function renderMatrix() {
   html += '<th class="col-spend" style="color:var(--danger);">траты</th>';
   sources.forEach(function(s) { html += '<th>' + s.code + '</th>'; });
   html += '<th class="col-income-total" style="color:var(--warn);white-space:nowrap;">доходы</th>';
-  html += '<th class="col-morning" style="color:var(--muted2);white-space:nowrap;">утро</th>';
-  html += '<th class="col-evening" style="color:var(--muted2);white-space:nowrap;">вечер</th>';
+  html += '<th class="col-evening" style="color:var(--accent);white-space:nowrap;">баланс</th>';
   html += '<th class="mo-sum col-row-total" style="color:var(--warn);white-space:nowrap;">дельта</th>';
   html += '</tr></thead><tbody>';
 
@@ -1057,10 +1054,8 @@ function renderMatrix() {
     });
     // доходы (col-income-total position — видна в свёрнутом режиме)
     r += '<td class="col-income-total" style="' + S + 'color:' + (mt.row > 0 ? 'var(--warn)' : 'var(--muted)') + ';">' + (mt.row > 0 ? fmtNum(mt.row) : '—') + '</td>';
-    // утро (col-morning position — баланс начала месяца)
-    r += '<td class="col-morning" style="' + S + 'color:' + (mb.start < 0 ? 'var(--danger)' : 'var(--muted2)') + ';">' + (mb.start !== 0 ? fmtNum(mb.start) : '—') + '</td>';
-    // вечер (col-evening position — баланс конца месяца)
-    r += '<td class="col-evening" style="' + S + 'color:' + (mb.end < 0 ? 'var(--danger)' : mb.end >= mb.start ? 'var(--accent)' : 'var(--muted2)') + ';">' + (mb.end !== 0 ? fmtNum(mb.end) : '—') + '</td>';
+    // баланс конца месяца
+    r += '<td class="col-evening" style="' + S + 'color:' + (mb.end < 0 ? 'var(--danger)' : 'var(--accent)') + ';">' + (mb.end !== 0 ? fmtNum(mb.end) : '—') + '</td>';
     // дельта (col-row-total, sticky right)
     const deltaColor = delta > 0 ? 'var(--accent)' : delta < 0 ? 'var(--danger)' : 'var(--warn)';
     r += '<td class="col-row-total" style="' + S + 'color:' + deltaColor + ';">' + (delta !== 0 ? (delta > 0 ? '+' : '') + fmtNum(delta) : '—') + '</td>';
@@ -1123,11 +1118,9 @@ function renderMatrix() {
     const incColor = rowTotal > 0 ? 'var(--warn)' : 'var(--muted)';
     html += '<td class="col-income-total" style="color:' + incColor + ';">' + (rowTotal > 0 ? fmtNum(rowTotal) : '') + '</td>';
 
-    // morning/evening balance
+    // balance (evening)
     const bals = balances[ds];
-    const mornColor = bals.morning < 0 ? 'var(--danger)' : 'var(--muted2)';
-    const evenColor = bals.evening < 0 ? 'var(--danger)' : bals.evening > bals.morning ? 'var(--accent)' : 'var(--muted2)';
-    html += '<td class="col-morning" style="color:' + mornColor + ';">' + (bals.morning !== 0 ? fmtNum(bals.morning) : '') + '</td>';
+    const evenColor = bals.evening < 0 ? 'var(--danger)' : 'var(--accent)';
     html += '<td class="col-evening" style="color:' + evenColor + ';">' + (bals.evening !== 0 ? fmtNum(bals.evening) : '') + '</td>';
 
     const dayResult = rowTotal - spendV;
@@ -1163,10 +1156,8 @@ function renderMatrix() {
   });
   // доходы (col-income-total position)
   html += '<td class="col-income-total" style="' + YS + 'color:' + (grandTotal > 0 ? 'var(--warn)' : 'var(--muted)') + ';">' + (grandTotal > 0 ? fmtNum(grandTotal) : '—') + '</td>';
-  // утро 1 янв (col-morning position)
-  html += '<td class="col-morning" style="' + YS + 'color:' + (yearStart < 0 ? 'var(--danger)' : 'var(--muted2)') + ';">' + (yearStart !== 0 ? fmtNum(yearStart) : '—') + '</td>';
-  // вечер 31 дек (col-evening position)
-  html += '<td class="col-evening" style="' + YS + 'color:' + (yearEnd < 0 ? 'var(--danger)' : yearEnd >= yearStart ? 'var(--accent)' : 'var(--muted2)') + ';">' + (yearEnd !== 0 ? fmtNum(yearEnd) : '—') + '</td>';
+  // баланс 31 дек
+  html += '<td class="col-evening" style="' + YS + 'color:' + (yearEnd < 0 ? 'var(--danger)' : 'var(--accent)') + ';">' + (yearEnd !== 0 ? fmtNum(yearEnd) : '—') + '</td>';
   // дельта (col-row-total, sticky)
   const yearDeltaColor = yearDelta > 0 ? 'var(--accent)' : yearDelta < 0 ? 'var(--danger)' : 'var(--warn)';
   html += '<td class="col-row-total" style="' + YS + 'font-size:12px;color:' + yearDeltaColor + ';">' + (yearDelta !== 0 ? (yearDelta > 0 ? '+' : '') + fmtNum(yearDelta) : '—') + '</td>';
@@ -1540,12 +1531,10 @@ function recalcAllTotals() {
 
     const incCell = allTds[n + 2];
     if (incCell) { incCell.textContent = ms.income > 0 ? fmtNum(ms.income) : '—'; incCell.style.color = ms.income > 0 ? 'var(--warn)' : 'var(--muted)'; }
-    const mornCell = allTds[n + 3];
-    if (mornCell) { mornCell.textContent = ms.startBal !== 0 ? fmtNum(ms.startBal) : '—'; mornCell.style.color = ms.startBal < 0 ? 'var(--danger)' : 'var(--muted2)'; }
-    const evenCell = allTds[n + 4];
-    if (evenCell) { evenCell.textContent = ms.endBal !== 0 ? fmtNum(ms.endBal) : '—'; evenCell.style.color = ms.endBal < 0 ? 'var(--danger)' : ms.endBal > ms.startBal ? 'var(--accent)' : 'var(--muted2)'; }
+    const evenCell = allTds[n + 3];
+    if (evenCell) { evenCell.textContent = ms.endBal !== 0 ? fmtNum(ms.endBal) : '—'; evenCell.style.color = ms.endBal < 0 ? 'var(--danger)' : 'var(--accent)'; }
     const delta = ms.income - ms.spend;
-    const deltaCell = allTds[n + 5];
+    const deltaCell = allTds[n + 4];
     if (deltaCell) { deltaCell.textContent = delta !== 0 ? (delta > 0 ? '+' : '') + fmtNum(delta) : '—'; deltaCell.style.color = delta > 0 ? 'var(--accent)' : delta < 0 ? 'var(--danger)' : 'var(--warn)'; }
   });
 
