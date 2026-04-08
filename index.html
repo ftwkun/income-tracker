@@ -82,6 +82,11 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); font
   background: var(--accent2); border-radius: 1px; opacity: 0.25;
   cursor: pointer; transition: opacity 0.1s;
 }
+@keyframes tl-cell-flash {
+  0%   { background: rgba(251,191,36,0.45); }
+  100% { background: transparent; }
+}
+.tl-flash { animation: tl-cell-flash 0.55s ease-out forwards; }
 .tl-marker:hover { opacity: 1; }
 #tl-cursor {
   position: absolute; left: 0; right: 0; height: 2px;
@@ -784,9 +789,9 @@ function getCell(date, srcId) {
 
 function setCell(date, srcId, value) {
   const key = cellKey(date, srcId);
-  if (!state.cells[key]) state.cells[key] = { value: '', history: [] };
-  const cell = state.cells[key];
   const now = new Date().toISOString();
+  if (!state.cells[key]) state.cells[key] = { value: '', history: [], createdAt: now };
+  const cell = state.cells[key];
   if (cell.value !== value) {
     cell.history.push({ value: cell.value, ts: now });
     cell.value = value;
@@ -889,6 +894,7 @@ function toggleDayDetail(e, td) {
   if (existing && existing.classList.contains('matrix-day-detail')) {
     existing.remove();
     tr.classList.remove('mdd-open');
+    window._mddUpdateErr = null;
     return;
   }
   tr.classList.add('mdd-open');
@@ -1082,6 +1088,7 @@ function toggleDayDetail(e, td) {
 
   // показать ошибку если уже есть сумма
   updateErrRow();
+  window._mddUpdateErr = updateErrRow;
 
   wrap.appendChild(incCol);
   wrap.appendChild(spendCol);
@@ -1613,6 +1620,14 @@ function getDataRange() {
 }
 function getMinTs() { return getDataRange().min; }
 
+function flashInp(inp) {
+  const el = inp.classList.contains('mdd-inp') ? inp.parentElement : inp.closest('td');
+  if (!el) return;
+  el.classList.remove('tl-flash');
+  void el.offsetWidth;
+  el.classList.add('tl-flash');
+}
+
 function setViewDate(isoStr, preview) {
   viewDate = isoStr;
   const ts = new Date(isoStr).getTime();
@@ -1629,14 +1644,19 @@ function setViewDate(isoStr, preview) {
 
     let val = '';
     const hist = cell.history || [];
-    for (var i = 0; i < hist.length; i++) {
-      if (new Date(hist[i].ts).getTime() <= ts) val = hist[i].value;
-    }
-    if (new Date(cell.history && cell.history.length ? cell.history[cell.history.length-1].ts : 0).getTime() <= ts) {
-      val = cell.value;
+    if (!hist.length) {
+      // нет истории — показываем значение только начиная с createdAt
+      const createdTs = cell.createdAt ? new Date(cell.createdAt).getTime() : 0;
+      val = (createdTs === 0 || ts >= createdTs) ? cell.value : '';
+    } else {
+      for (var i = 0; i < hist.length; i++) {
+        if (new Date(hist[i].ts).getTime() <= ts) val = hist[i].value;
+      }
+      if (new Date(hist[hist.length - 1].ts).getTime() <= ts) val = cell.value;
     }
     const n = parseFloat(val);
-    inp.value = (!isNaN(n) && n !== 0) ? Math.round(n) : '';
+    const newDisplay = (!isNaN(n) && n !== 0) ? String(Math.round(n)) : '';
+    if (inp.value !== newDisplay) { inp.value = newDisplay; flashInp(inp); }
     inp.classList.contains('mdd-inp')
       ? inp.classList.toggle('has-value', !isNaN(n) && n !== 0)
       : (inp.className = (!isNaN(n) && n !== 0) ? 'has-value' : 'zero');
@@ -1645,7 +1665,8 @@ function setViewDate(isoStr, preview) {
   // update spend inputs to historical values
   document.querySelectorAll('input[data-spend-date]').forEach(function(inp) {
     const v = getSpendAt(inp.dataset.spendDate, ts);
-    inp.value = v > 0 ? Math.round(v) : '';
+    const newSpDisplay = v > 0 ? String(Math.round(v)) : '';
+    if (inp.value !== newSpDisplay) { inp.value = newSpDisplay; flashInp(inp); }
     inp.classList.contains('mdd-inp')
       ? inp.classList.toggle('has-value', v > 0)
       : (inp.className = v > 0 ? 'has-value' : '');
@@ -1728,6 +1749,8 @@ function recalcAllTotals() {
     if (deltaCell) { deltaCell.textContent = delta !== 0 ? (delta > 0 ? '+' : '') + fmtNum(delta) : '—'; deltaCell.style.color = delta > 0 ? 'var(--accent)' : delta < 0 ? 'var(--danger)' : 'var(--warn)'; }
   });
 
+  if (typeof window._mddUpdateErr === 'function') window._mddUpdateErr();
+
   // recalc visible day row totals
   days.forEach(function(ds) {
     const row = document.querySelector('tr[data-date-row="' + ds + '"]');
@@ -1740,7 +1763,14 @@ function recalcAllTotals() {
     });
     // income col
     const incCell = row.querySelector('.col-income-total');
-    if (incCell) { incCell.textContent = total > 0 ? fmtNum(total) : ''; incCell.style.color = total > 0 ? 'var(--warn)' : 'var(--muted)'; }
+    if (incCell) {
+      const newIncText = total > 0 ? fmtNum(total) : '';
+      if (viewDate && incCell.textContent !== newIncText) {
+        incCell.classList.remove('tl-flash'); void incCell.offsetWidth; incCell.classList.add('tl-flash');
+      }
+      incCell.textContent = newIncText;
+      incCell.style.color = total > 0 ? 'var(--warn)' : 'var(--muted)';
+    }
     // day result col
     const spendInp = row.querySelector('input[data-spend-date]');
     const spend = spendInp ? (parseFloat(spendInp.value) || 0) : (parseFloat((state.spends || {})[ds]) || 0);
